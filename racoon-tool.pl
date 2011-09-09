@@ -112,11 +112,12 @@ my %peer_list = (	'%default' => {
 			} );
 
 # Connection related stuff
-my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression';
+my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|ul_proto|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression';
 my @conn_required_props = ( 'src_ip', 'dst_ip');
 my %connection_list = ( '%default' => {
 			'admin_status' 		=> 'disabled',
 			'upperspec' 		=> 'any',
+			'ul_proto'		=> 'any',
 			'encap' 		=> 'esp',
 			'level' 		=> 'unique',
 			'spdadd_template' 	=> '%default',
@@ -136,6 +137,7 @@ my %prop_typehash = ( 	'connection'	=> {
 			'src_ip' 	=> 'ip',
 			'dst_ip'	=> 'ip',
 			'upperspec'	=> 'upperspec',
+			'ul_proto'	=> 'ul_proto',
 			'encap'		=> 'encap',
 			'level'		=> 'level',
 			'mode'		=> 'mode',
@@ -188,6 +190,7 @@ my %prop_typehash = ( 	'connection'	=> {
 my %prop_syntaxhash = (	'range'		=> '{ip-address|ip-address/masklen|ip-address[port]|ip-address/masklen[port]}',
 			'ip'		=> '{ip-address} - IPv4 or IPv6',
 			'uppserspec'	=> '{protocol} - number or /etc/protocols or any or icmp6',
+			'ul_proto'	=> '{any|ip4|ip6} - upper layer protocol to apply IPSEC to',
 			'encap'		=> '{ah|esp}',
 			'mode'		=> '{tunnel|transport}',
 			'boolean'	=> '{enabled|disabled|true|false|yes|no|up|down|on|off|0|1}',
@@ -290,7 +293,7 @@ EOF
 		);
 
 my $sainfo_default = <<'EOF';
-sainfo address ___src_range___ ___upperspec___ address ___dst_range___ ___upperspec___ {
+sainfo address ___local_id___ ___ul_proto___ address ___remote_id___ ___ul_proto___ {
         encryption_algorithm ___encryption_algorithm___;
         authentication_algorithm ___authentication_algorithm___;
 	compression_algorithm deflate;
@@ -758,6 +761,7 @@ sub racoon_write_config ($$) {
 	my @spd_list;
 	my %conn_spd_hash;
 	my @remote_done = ();
+	my @sainfo_done = ();
 
 	parse_spd (@spd_list, %conn_spd_hash);
 
@@ -779,6 +783,7 @@ EOF
 	my $stuff = racoon_fill_init();
 	print RCF $stuff;
 
+
 	foreach my $connection ( keys %conn_spd_hash ) {
 		my $stuff = '';
 		my $hndl = $connection_list{$connection};
@@ -792,6 +797,12 @@ EOF
 			print RCF $stuff;
 		}
 
+		my $id_string = $hndl->{'local_id'} . '_' . $hndl->{'remote_id'};
+		if ( grep { $id_string eq $_ } @sainfo_done) {
+			print RCF "\n";
+			next;
+		}
+		push @sainfo_done, $id_string;
 		# print sainfo clauses needed...
 		$stuff = racoon_fill_sainfo($connection);
 		print RCF $stuff;
@@ -1237,13 +1248,15 @@ sub match_spd_connection (\@\%) {
 			
 			# Quick handle - read only
 			my $conn = $connection_list{$connection};
-			if ( ($spd->{'src_range' } eq $conn->{'src_range'}
+			if ($spd->{'src_range' } eq $conn->{'src_range'}
 				  && $spd->{'dst_range'} eq $conn->{'dst_range'}
 				  && $spd->{'direction'} eq 'out'
 				|| $spd->{'dst_range'} eq $conn->{'src_range'}
 				  && $spd->{'src_range'} eq $conn->{'dst_range'}
-				  && $spd->{'direction'} eq 'in')
-				&& $spd->{'upperspec'} eq $conn->{'upperspec'} ) {
+				  && $spd->{'direction'} eq 'in'
+				|| $spd->{'dst_range'} eq $conn->{'src_range'}
+				  && $spd->{'src_range'} eq $conn->{'dst_range'}
+				  && $spd->{'direction'} eq 'fwd') {
 				$spd->{'connection'} = $connection;
 				push @{ $conn_spd_hash->{$connection} }, $index;
 			}
@@ -1909,10 +1922,21 @@ sub conn_fillin_defaults () {
 				$connection_list{$connection}{"${p}_range"} .= "[any]";
 			}
 			# Remove full length netmasks to avoid confusing things...
-			$connection_list{$connection}{"${p}_range"} =~ s/\/32//;
+			if ($connection_list{$connection}{"${p}_range"} =~ m/^[0-9]{1,3}\./) {
+				$connection_list{$connection}{"${p}_range"} =~ s/\/32//;
+			}
 			$connection_list{$connection}{"${p}_range"} =~ s/\/128//;
 				
 		}
+
+		# Work out IDs for use with racoon configuration
+		# Remove any port information as racoon sees it as duplicate sainfo...
+		my $local_id = $connection_list{$connection}{'src_range'};
+		$local_id =~ s/\[(any|[0-9]{1,5})\]$//;
+		$connection_list{$connection}{'local_id'} = $local_id;
+		my $remote_id = $connection_list{$connection}{'dst_range'};
+		$remote_id =~ s/\[(any|[0-9]{1,5})\]$//;
+		$connection_list{$connection}{'remote_id'} = $remote_id; 
 		
 		# Set the mode appropriately if not already set
 		if ( !defined $connection_list{$connection}{'mode'} ) {
