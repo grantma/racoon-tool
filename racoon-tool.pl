@@ -64,7 +64,7 @@ $modpath_xfrm = "$modpath/kernel/net/xfrm";
 $modpath_key = "$modpath/kernel/net/key";
 $modpath_crypto = "$modpath/kernel/crypto";
 $modpath_zlib = "$modpath/kernel/lib/zlib_deflate";
-$modext = ( $kver =~ /^2\.6\./ ? ".ko" : ".o" );
+$modext = ( $kver =~ /^2\.6\.|^3\./ ? ".ko" : ".o" );
 $progname = basename($0, "");
 $proc_ipv4 = "/proc/sys/net/ipv4";
 $proc_ipv6 = "/proc/sys/net/ipv6";
@@ -790,888 +790,885 @@ EOF
 			push @remote_done, $dst_ip;
 			$stuff = racoon_fill_remote($dst_ip);
 			print RCF $stuff;
+		}
+
+		# print sainfo clauses needed...
+		$stuff = racoon_fill_sainfo($connection);
+		print RCF $stuff;
 	}
 
-	# print sainfo clauses needed...
-	$stuff = racoon_fill_sainfo($connection);
-	print RCF $stuff;
-}
+	# Handle anonymous connection
+	my $hndl = $connection_list{'%anonymous'};
+	my $phndl = $peer_list{'%anonymous'};
 
-# Handle anonymous connection
-my $hndl = $connection_list{'%anonymous'};
-my $phndl = $peer_list{'%anonymous'};
+	if ( defined $hndl && $hndl
+		&& defined $hndl->{'admin_status'}
+		&& $bool_val{"$hndl->{'admin_status'}"} != 0
+		&& $hndl->{'makelive'} != 0 
+		&& defined $phndl
+		&& $phndl
+		&& $phndl->{'makelive'} != 0 ) {
+		my $stuff = '';
+		print RCF "#\n# Anonymous connection section\n#\n";
+		$stuff = racoon_fill_remote('%anonymous');
+		print RCF $stuff;
+		$stuff = racoon_fill_sainfo('%anonymous');
+		print RCF $stuff;
+	}
 
-if ( defined $hndl && $hndl
-	&& defined $hndl->{'admin_status'}
-	&& $bool_val{"$hndl->{'admin_status'}"} != 0
-	&& $hndl->{'makelive'} != 0 
-	&& defined $phndl
-	&& $phndl
-	&& $phndl->{'makelive'} != 0 ) {
-	my $stuff = '';
-	print RCF "#\n# Anonymous connection section\n#\n";
-	$stuff = racoon_fill_remote('%anonymous');
-	print RCF $stuff;
-	$stuff = racoon_fill_sainfo('%anonymous');
-	print RCF $stuff;
-}
-
-close RCF;
+	close RCF;
 }
 
 sub log_backend () {
-foreach my $arg ( @ARGV ) {
-next if $arg ne '-l';
+	foreach my $arg ( @ARGV ) {
+		next if $arg ne '-l';
 
-my $error = 0;
-while ( <STDIN> ) {
-	chomp;
-	prog_warn 0, "setkey said: $_";
-	$error = 1;
-}
+		my $error = 0;
+		while ( <STDIN> ) {
+			chomp;
+			prog_warn 0, "setkey said: $_";
+			$error = 1;
+		}
 
-exit $error;
-}
-
-
+		exit $error;
+	}
 }
 
 # List all connections
 sub conn_list ($) {
-my $connection = shift;
+	my $connection = shift;
 
-my $exit_code = 1;
+	my $exit_code = 1;
 
-if ( ! defined $connection || $connection eq 'all' ) {
-	$connection = '.*';
-}
+	if ( ! defined $connection || $connection eq 'all' ) {
+		$connection = '.*';
+	}
 
-my @conns = grep /${connection}/, keys(%connection_list);
-@conns = grep !/^%default$/, @conns;
-open( PAGER, '|-' ) 
-	|| exec ("$pager_cmd", @pager_flags);
-foreach my $conn ( @conns ) {
-	print PAGER "$conn\n";
-}
-close PAGER or die "$progname: conn_list () - $pager_cmd failed - exit code " . ($? >> 8) . "\n";
+	my @conns = grep /${connection}/, keys(%connection_list);
+	@conns = grep !/^%default$/, @conns;
+	open( PAGER, '|-' ) 
+		|| exec ("$pager_cmd", @pager_flags);
+	foreach my $conn ( @conns ) {
+		print PAGER "$conn\n";
+	}
+	close PAGER or die "$progname: conn_list () - $pager_cmd failed - exit code " . ($? >> 8) . "\n";
 
-exit ( scalar(@conns) == 0 );
+	exit ( scalar(@conns) == 0 );
 }
 
 # Connection up
 sub conn_up_handle ($) {
-my $connection = shift;
+	my $connection = shift;
 
-if (! defined $connection ) {
-	usage ();
-	exit 1;
-}
+	if (! defined $connection ) {
+		usage ();
+		exit 1;
+	}
 
-if ( $connection eq 'all' ) {
-	# Flush SPD and SAD
-	ipsec_flush ();
-	
-	# Load the SPD
-	spd_load();
+	if ( $connection eq 'all' ) {
+		# Flush SPD and SAD
+		ipsec_flush ();
+		
+		# Load the SPD
+		spd_load();
+
+		# Do dee racoon...
+		exit 1 if racoon_configure() < 0;
+
+		exit 0;
+	}
+
+	print "Starting VPN $connection...";
+	if ((my $ret = spd_load($connection)) <= 0 ) {
+		print "not found in configuration\n" if $ret == 0;
+		print "syntax problem in configuration.\n" if $ret == -1;
+		print "already in SPD.\n" if $ret == -2;
+		exit 1;
+	}
 
 	# Do dee racoon...
-	exit 1 if racoon_configure() < 0;
+	exit 1 if racoon_configure($fmt{'brief'}) < 0;
+
+	print "done.\n";
+	prog_warn 'info', "$connection started.";
+
 
 	exit 0;
-}
-
-print "Starting VPN $connection...";
-if ((my $ret = spd_load($connection)) <= 0 ) {
-	print "not found in configuration\n" if $ret == 0;
-	print "syntax problem in configuration.\n" if $ret == -1;
-	print "already in SPD.\n" if $ret == -2;
-	exit 1;
-}
-
-# Do dee racoon...
-exit 1 if racoon_configure($fmt{'brief'}) < 0;
-
-print "done.\n";
-prog_warn 'info', "$connection started.";
-
-
-exit 0;
 }
 
 # Connection down
 sub conn_down_handle ($) {
-my $connection = shift;
-my @spd_list;
-my %conn_spd_hash;
+	my $connection = shift;
+	my @spd_list;
+	my %conn_spd_hash;
 
-if ( ! defined $connection ) {
-	usage ();
-	exit 1;
-}
+	if ( ! defined $connection ) {
+		usage ();
+		exit 1;
+	}
 
-if ( $connection eq 'all' ) {
-	# Flush SPD and SAD
-	ipsec_flush ();
-	
-	# Do dee racoon...
-	exit 1 if racoon_configure() < 0;
-	
-	exit 0;
-}
+	if ( $connection eq 'all' ) {
+		# Flush SPD and SAD
+		ipsec_flush ();
+		
+		# Do dee racoon...
+		exit 1 if racoon_configure() < 0;
+		
+		exit 0;
+	}
 
-print "Shutting down VPN $connection...";
-if ( ! grep /^${connection}$/, keys %connection_list) {
-	print "not found in configuration.\n";
-	exit 1;
-}
-# Read SPD list from kernel...
-parse_spd(@spd_list, %conn_spd_hash);
-if ( ! conn_down (@spd_list, %conn_spd_hash, $connection, 1) ) {
-	print "not found in SPD.\n";
-	exit 0;
-}
-print "done.\n";
-prog_warn 'info', "$connection shutdown.";
+	print "Shutting down VPN $connection...";
+	if ( ! grep /^${connection}$/, keys %connection_list) {
+		print "not found in configuration.\n";
+		exit 1;
+	}
+	# Read SPD list from kernel...
+	parse_spd(@spd_list, %conn_spd_hash);
+	if ( ! conn_down (@spd_list, %conn_spd_hash, $connection, 1) ) {
+		print "not found in SPD.\n";
+		exit 0;
+	}
+	print "done.\n";
+	prog_warn 'info', "$connection shutdown.";
 
-exit 0
+	exit 0
 }
 
 sub conn_reload_handle ($) {
-my $connection = shift;
-my @spd_list;
-my %conn_spd_hash;
+	my $connection = shift;
+	my @spd_list;
+	my %conn_spd_hash;
 
-if ( ! defined $connection ) {
-	usage ();
-	exit 1;
-}
+	if ( ! defined $connection ) {
+		usage ();
+		exit 1;
+	}
 
-if ( $connection eq 'all' ) {
-	ipsec_load();
-	
+	if ( $connection eq 'all' ) {
+		ipsec_load();
+		
+		exit 0;
+	}
+
+	print "Reloading VPN $connection...";
+	if ( ! grep /^${connection}$/, keys %connection_list) {
+		print "not found in configuration.\n";
+		exit 1;
+	}
+	# Read SPD list from kernel...
+	parse_spd(@spd_list, %conn_spd_hash);
+	if ( ! conn_down (@spd_list, %conn_spd_hash, $connection, 1, 1) ) {
+		print "not found in SPD, ";
+	}
+
+	if ((my $ret = spd_load($connection)) <= 0 ) {
+		print "not found in configuration.\n" if $ret == 0;
+		print "syntax problem in configuration.\n" if $ret == -1;
+		print "already in SPD.\n" if $ret == -2;
+		exit 1;
+	}
+
+	# Do dee racoon...
+	exit 1 if racoon_configure($fmt{'brief'}) < 0;
+
+	print "done.\n";
+	prog_warn 'info', "$connection reloaded.";
+
 	exit 0;
 }
 
-print "Reloading VPN $connection...";
-if ( ! grep /^${connection}$/, keys %connection_list) {
-	print "not found in configuration.\n";
-	exit 1;
-}
-# Read SPD list from kernel...
-parse_spd(@spd_list, %conn_spd_hash);
-if ( ! conn_down (@spd_list, %conn_spd_hash, $connection, 1, 1) ) {
-	print "not found in SPD, ";
-}
-
-if ((my $ret = spd_load($connection)) <= 0 ) {
-	print "not found in configuration.\n" if $ret == 0;
-	print "syntax problem in configuration.\n" if $ret == -1;
-	print "already in SPD.\n" if $ret == -2;
-	exit 1;
-}
-
-# Do dee racoon...
-exit 1 if racoon_configure($fmt{'brief'}) < 0;
-
-print "done.\n";
-prog_warn 'info', "$connection reloaded.";
-
-exit 0;
-}
-
 sub spd_show_header () {
-print "Number  Connection Name                                     UpperSpec  DirN\n";
-print "          src_range\n";
-print "          dst_range\n";
+	print "Number  Connection Name                                     UpperSpec  DirN\n";
+	print "          src_range\n";
+	print "          dst_range\n";
 }
 
 sub spd_show_entry ($) {
-my $entry = shift;
-my $conn_name;
+	my $entry = shift;
+	my $conn_name;
 
-if (defined $$entry{'connection'}) {
-	$conn_name = $$entry{'connection'};
-} else {
-	$conn_name = '';
-}
+	if (defined $$entry{'connection'}) {
+		$conn_name = $$entry{'connection'};
+	} else {
+		$conn_name = '';
+	}
 
-printf "   %3.1d  %-50s  %-9s  %-3s\n", 
-	$$entry{'index'}, $conn_name, 
-	$$entry{'upperspec'}, $$entry{'direction'};
-print "          $$entry{'src_range'}\n";
-print "          $$entry{'dst_range'}\n";
+	printf "   %3.1d  %-50s  %-9s  %-3s\n", 
+		$$entry{'index'}, $conn_name, 
+		$$entry{'upperspec'}, $$entry{'direction'};
+	print "          $$entry{'src_range'}\n";
+	print "          $$entry{'dst_range'}\n";
 }
 
 sub spd_show_footer () {
-print "\n";
-print "Press <Return> for more, or enter number or VPN-name > ";
+	print "\n";
+	print "Press <Return> for more, or enter number or VPN-name > ";
 }
 
 sub conn_menu ($) {
-my $term = shift;
-my @spd_list;
-my %conn_spd_hash;
+	my $term = shift;
+	my @spd_list;
+	my %conn_spd_hash;
 
-# Initialise the SPD data structure
-parse_spd(@spd_list, %conn_spd_hash);
+	# Initialise the SPD data structure
+	parse_spd(@spd_list, %conn_spd_hash);
 
-my ($pos,$rows,$cols,$do_fill) = 0;
-$term = '.*' if ! defined $term;
-my @spd = grep { ( defined $$_{'connection'} && $$_{'connection'} =~ m/${term}/ )
-			|| $$_{'src_range'} =~ m/${term}/
-			|| $$_{'dst_range'} =~ m/${term}/ } @spd_list;
+	my ($pos,$rows,$cols,$do_fill) = 0;
+	$term = '.*' if ! defined $term;
+	my @spd = grep { ( defined $$_{'connection'} && $$_{'connection'} =~ m/${term}/ )
+				|| $$_{'src_range'} =~ m/${term}/
+				|| $$_{'dst_range'} =~ m/${term}/ } @spd_list;
 
-if ( ! @spd ) {
-	print "No SPD entries found.\n";
-	return;
-}
+	if ( ! @spd ) {
+		print "No SPD entries found.\n";
+		return;
+	}
 
 REDRAW:	while ($pos < @spd_list) {
-	# get terminal size 
-	($rows, $cols) = split ' ', `stty size`;
-	my $ntoshow = ($rows - 6) / 3;
-	my $fill = $rows % $ntoshow;
-	if ( ($pos +$ntoshow)  > @spd) {
-		$fill += 3*($pos + $ntoshow - @spd);
-	}
-	# display SPD list
-	if ( $do_fill ) {
-		foreach (0..$fill) { print "\n" };
-	}
-	$do_fill = 1;
-	spd_show_header ();
-	for ($i=$pos; $i < ($pos + $ntoshow) && $i < @spd; $i++) {
+		# get terminal size 
+		($rows, $cols) = split ' ', `stty size`;
+		my $ntoshow = ($rows - 6) / 3;
+		my $fill = $rows % $ntoshow;
+		if ( ($pos +$ntoshow)  > @spd) {
+			$fill += 3*($pos + $ntoshow - @spd);
+		}
+		# display SPD list
+		if ( $do_fill ) {
+			foreach (0..$fill) { print "\n" };
+		}
+		$do_fill = 1;
+		spd_show_header ();
+		for ($i=$pos; $i < ($pos + $ntoshow) && $i < @spd; $i++) {
 
-		spd_show_entry ($spd[$i]);
-	}
-	spd_show_footer ();
+			spd_show_entry ($spd[$i]);
+		}
+		spd_show_footer ();
 
-	# wait for keypress
-	while ( my $chars = <STDIN> ) {
-		last if $chars =~ /^$/;
-		$chars = lc $chars;
-		exit 0 if $chars =~ /^q$/;
-		chomp $chars;
-		my @deleted = conn_down(@spd_list, %conn_spd_hash, $chars) if $chars =~ /^[-0-9a-z_]+$/;
-		if (! @deleted) {
-			print "$chars does not exist or cannot be deleted.\n";
-		} 
-		else {	
-			foreach my $i ( @deleted ) {
-				@spd = grep { $i != $$_{'index'} } @spd;				
-				$pos -= 1 if $pos > 0;
+		# wait for keypress
+		while ( my $chars = <STDIN> ) {
+			last if $chars =~ /^$/;
+			$chars = lc $chars;
+			exit 0 if $chars =~ /^q$/;
+			chomp $chars;
+			my @deleted = conn_down(@spd_list, %conn_spd_hash, $chars) if $chars =~ /^[-0-9a-z_]+$/;
+			if (! @deleted) {
+				print "$chars does not exist or cannot be deleted.\n";
+			} 
+			else {	
+				foreach my $i ( @deleted ) {
+					@spd = grep { $i != $$_{'index'} } @spd;				
+					$pos -= 1 if $pos > 0;
+				}
 			}
+			if ( ! @spd ) {
+				print "No selected SPD entries left.\n";
+				last REDRAW;
+			}
+			sleep 2;
+			next REDRAW;
 		}
-		if ( ! @spd ) {
-			print "No selected SPD entries left.\n";
-			last REDRAW;
-		}
-		sleep 2;
-		next REDRAW;
-	}
 
-	$pos += $ntoshow;
-}
+		$pos += $ntoshow;
+	}
 
 
 }
 
 sub conn_down (\@\%$;$$) {
-my $spd_list = shift;
-my $conn_spd_hash = shift;
-my $spd = shift;
-my $conn_force = shift;
-my $no_racoon = shift;
+	my $spd_list = shift;
+	my $conn_spd_hash = shift;
+	my $spd = shift;
+	my $conn_force = shift;
+	my $no_racoon = shift;
 
-my @ret = ();
-my @spd_to_del = ();
-if ( $conn_force || $spd !~ m/^[0-9]+$/ ) {
-	# Deal with a connection name
-	@spd_to_del = keys %$conn_spd_hash;
-	return @ret if @spd_to_del <= 0;
-	return @ret if ! grep /^$spd$/, keys %$conn_spd_hash;
-	@spd_to_del = @{ $conn_spd_hash->{$spd} };
-	return @ret if @spd_to_del <= 0; 
-} 
-else {
-	# Handle a connection number
-	# Check that it exists
-	return @ret if ! grep { $$_{'index'} == $spd } @$spd_list;
+	my @ret = ();
+	my @spd_to_del = ();
+	if ( $conn_force || $spd !~ m/^[0-9]+$/ ) {
+		# Deal with a connection name
+		@spd_to_del = keys %$conn_spd_hash;
+		return @ret if @spd_to_del <= 0;
+		return @ret if ! grep /^$spd$/, keys %$conn_spd_hash;
+		@spd_to_del = @{ $conn_spd_hash->{$spd} };
+		return @ret if @spd_to_del <= 0; 
+	} 
+	else {
+		# Handle a connection number
+		# Check that it exists
+		return @ret if ! grep { $$_{'index'} == $spd } @$spd_list;
 
-	# Follow up any connection name and add that one to
-	my ($spdentry) = grep { $$_{'index'} == $spd }  @$spd_list;
-	goto GO if ! defined $$spdentry{'connection'};
-	$connection = $$spdentry{'connection'};
-	goto GO if @{ $conn_spd_hash->{$connection} } <= 0;
-	push @spd_to_del, @{ $conn_spd_hash->{$connection} };
-}
+		# Follow up any connection name and add that one to
+		my ($spdentry) = grep { $$_{'index'} == $spd }  @$spd_list;
+		goto GO if ! defined $$spdentry{'connection'};
+		$connection = $$spdentry{'connection'};
+		goto GO if @{ $conn_spd_hash->{$connection} } <= 0;
+		push @spd_to_del, @{ $conn_spd_hash->{$connection} };
+	}
 
 GO:
-# Delete entries from SPD
-open( SETKEY, '|-')
-	|| exec ("$setkey_cmd", '-c');
+	# Delete entries from SPD
+	open( SETKEY, '|-')
+		|| exec ("$setkey_cmd", '-c');
 
-foreach my $spdnum ( @spd_to_del ) {
-	my ($spdentry) = grep { $$_{'index'} == $spdnum }  @$spd_list;
+	foreach my $spdnum ( @spd_to_del ) {
+		my ($spdentry) = grep { $$_{'index'} == $spdnum }  @$spd_list;
 	print SETKEY <<"EOF";
 spddelete -n $$spdentry{'src_range'} $$spdentry{'dst_range'} $$spdentry{'upperspec'} -P $$spdentry{'direction'};
 EOF
-	push @ret, $spdnum;
-}
+		push @ret, $spdnum;
+	}
 
-close SETKEY
-	or prog_die ("conn_down() - setkey connection deletion failed - exit code ". ($? >> 8) );
+	close SETKEY
+		or prog_die ("conn_down() - setkey connection deletion failed - exit code ". ($? >> 8) );
 
-# Deal with racoon
-if ( ! $no_racoon ) {
-	racoon_configure();
-}
+	# Deal with racoon
+	if ( ! $no_racoon ) {
+		racoon_configure();
+	}
 
-return @ret;
+	return @ret;
 }
 
 # Process warning message
 
 sub prog_warn($$;$) {
-my $level = shift;
-my $msg = shift;
-my $format = shift;
+	my $level = shift;
+	my $msg = shift;
+	my $format = shift;
 
-$format = $global_format if ! $format;
-$level = 'warning' if ! $level;
-$msg =~ s/\t/        /g;
-if ( $level ne 'info' ) {
-	if ( $format == $fmt{'normal'} ) { 
-		print STDERR "$progname: $msg\n"
-	} elsif ( $format == $fmt{'brief'} ) {
-		print STDOUT "${msg}\n";
-	} elsif ( $format == $fmt{'comma'} ) {
-		$msg =~ s/\.$//;
-		print STDOUT "${msg}, ";
+	$format = $global_format if ! $format;
+	$level = 'warning' if ! $level;
+	$msg =~ s/\t/        /g;
+	if ( $level ne 'info' ) {
+		if ( $format == $fmt{'normal'} ) { 
+			print STDERR "$progname: $msg\n"
+		} elsif ( $format == $fmt{'brief'} ) {
+			print STDOUT "${msg}\n";
+		} elsif ( $format == $fmt{'comma'} ) {
+			$msg =~ s/\.$//;
+			print STDOUT "${msg}, ";
+		}
 	}
-}
-$msg =~ s/%/%%/g;
-syslog ($level, "$msg");
+	$msg =~ s/%/%%/g;
+	syslog ($level, "$msg");
 }
 
 sub prog_die($;$) {
-my $msg = shift;
-my $format = shift;
-prog_warn 'err', $msg, $format;
-exit 255;
+	my $msg = shift;
+	my $format = shift;
+	prog_warn 'err', $msg, $format;
+	exit 255;
 }
 
 # Dump read in SPD list
 sub spd_dump_list (\@\%) {
-my $spd_list = shift;
-my $conn_spd_hash = shift;
+	my $spd_list = shift;
+	my $conn_spd_hash = shift;
 
-for my $spd ( @$spd_list ) {
-	print "{ ";
-	for $val ( keys %$spd ) {
-		print "$val=$spd->{$val} ";
+	for my $spd ( @$spd_list ) {
+		print "{ ";
+		for $val ( keys %$spd ) {
+			print "$val=$spd->{$val} ";
+		}
+		print "}\n";
 	}
-	print "}\n";
-}
 
-for my $conn ( keys(%$conn_spd_hash) ) {
-	print "$conn: @{ $conn_spd_hash->{$conn} }\n";
-}
+	for my $conn ( keys(%$conn_spd_hash) ) {
+		print "$conn: @{ $conn_spd_hash->{$conn} }\n";
+	}
 }
 
 # Parse SPD to produce SPD list
 sub parse_spd (\@\%) {
-my $spd_list = shift;
-my $conn_spd_hash = shift;
-my $src_range;
-my $dst_range;
-my $upperspec;
-my $direction;
-my $onespd_flag = 0;
+	my $spd_list = shift;
+	my $conn_spd_hash = shift;
+	my $src_range;
+	my $dst_range;
+	my $upperspec;
+	my $direction;
+	my $onespd_flag = 0;
 
-@$spd_list = ();
+	@$spd_list = ();
 
-open (SETKEY, '-|')
-	|| exec ($setkey_cmd, '-PD');
+	open (SETKEY, '-|')
+		|| exec ($setkey_cmd, '-PD');
 
-while (my $line = <SETKEY>) {
-	# print "$line";
-	if ( $line =~ m/^\s*([0-9a-fny\.\:\/\[\]]+)\s+([0-9a-fny\.\:\/\[\]]+)\s+([0-9a-z]+)\s*$/ ){
-		$src_range = $1;
-		$dst_range = $2;
-		$upperspec = $3;
-		$onespd_flag = 1
-	} 
-	elsif ($onespd_flag > 0) {
-		$onespd_flag = 0;
-		$line =~ m/^\s*(in|out)\s+(prio def)?\s?(ipsec|none|discard)\s*$/;
-		$direction = $1;
-		push @$spd_list, { 'src_range', $src_range, 'dst_range', $dst_range, 
-				'upperspec', $upperspec, 'direction', $direction };
-		print "[ src_range=$src_range, dst_range=$dst_range, upperspec=$upperspec, direction=$direction ]\n";
+	while (my $line = <SETKEY>) {
+		# print "$line";
+		if ( $line =~ m/^\s*([0-9a-fny\.\:\/\[\]]+)\s+([0-9a-fny\.\:\/\[\]]+)\s+([0-9a-z]+)\s*$/ ){
+			$src_range = $1;
+			$dst_range = $2;
+			$upperspec = $3;
+			$onespd_flag = 1
+		} 
+		elsif ($onespd_flag > 0) {
+			$onespd_flag = 0;
+			$line =~ m/^\s*(in|out|fwd)\s+(prio def)?\s?(ipsec|none|discard)\s*$/;
+			$direction = $1;
+			push @$spd_list, { 'src_range', $src_range, 'dst_range', $dst_range, 
+					'upperspec', $upperspec, 'direction', $direction };
+			print "[ src_range=$src_range, dst_range=$dst_range, upperspec=$upperspec, direction=$direction ]\n";
+		}
 	}
-}
 
-close (SETKEY)
-	or prog_die "parse_spd() - can't parse SPD - exit code " . ($? >> 8);
+	close (SETKEY)
+		or prog_die "parse_spd() - can't parse SPD - exit code " . ($? >> 8);
 
-# match the SPD policies to configuration data.
-match_spd_connection (@$spd_list, %$conn_spd_hash);
+	# match the SPD policies to configuration data.
+	match_spd_connection (@$spd_list, %$conn_spd_hash);
 
 }
 
 
 sub match_spd_connection (\@\%) {
-my $spd_list = shift;
-my $conn_spd_hash = shift;
-my $index = 0;
+	my $spd_list = shift;
+	my $conn_spd_hash = shift;
+	my $index = 0;
 
-%$conn_spd_hash = ();
+	%$conn_spd_hash = ();
 
-foreach my $spd ( @$spd_list ) {
-	$spd->{'index'} = $index;
-	
-	# Loop over connection list to find connection name
-	foreach my $connection ( keys %connection_list ) {
-		next if "$connection" eq '%default';
-		next if ! defined $connection_list{$connection}{'src_ip'};
-		next if ! defined $connection_list{$connection}{'dst_ip'};
+	foreach my $spd ( @$spd_list ) {
+		$spd->{'index'} = $index;
 		
-		# Quick handle - read only
-		my $conn = $connection_list{$connection};
-
-		if ( ($spd->{'src_range' } eq $conn->{'src_range'}
-			  && $spd->{'dst_range'} eq $conn->{'dst_range'}
-			  && $spd->{'direction'} eq 'out'
-			|| $spd->{'dst_range'} eq $conn->{'src_range'}
-			  && $spd->{'src_range'} eq $conn->{'dst_range'}
-			  && $spd->{'direction'} eq 'in')
-			&& $spd->{'upperspec'} eq $conn->{'upperspec'} ) {
-			$spd->{'connection'} = $connection;
-			push @{ $conn_spd_hash->{$connection} }, $index;
+		# Loop over connection list to find connection name
+		foreach my $connection ( keys %connection_list ) {
+			next if "$connection" eq '%default';
+			next if ! defined $connection_list{$connection}{'src_ip'};
+			next if ! defined $connection_list{$connection}{'dst_ip'};
+			
+			# Quick handle - read only
+			my $conn = $connection_list{$connection};
+			if ( ($spd->{'src_range' } eq $conn->{'src_range'}
+				  && $spd->{'dst_range'} eq $conn->{'dst_range'}
+				  && $spd->{'direction'} eq 'out'
+				|| $spd->{'dst_range'} eq $conn->{'src_range'}
+				  && $spd->{'src_range'} eq $conn->{'dst_range'}
+				  && $spd->{'direction'} eq 'in')
+				&& $spd->{'upperspec'} eq $conn->{'upperspec'} ) {
+				$spd->{'connection'} = $connection;
+				push @{ $conn_spd_hash->{$connection} }, $index;
+			}
 		}
-	}
 
-	$index ++;
-}
+		$index ++;
+	}
 
 }
 
 # start 
 sub ipsec_start () {
-mod_start ();
-ipsec_flush ();
-ipsec_load ();
-racoon_start();
+	mod_start ();
+	ipsec_flush ();
+	ipsec_load ();
+	racoon_start();
 }
 
 # stop
 sub ipsec_stop () {
-racoon_stop();
-ipsec_flush ();
-mod_stop ();
+	racoon_stop();
+	ipsec_flush ();
+	mod_stop ();
 }
 
 # load
 sub ipsec_load () {
-print "Loading SAD and SPD...\n";
-sad_init ();
-spd_init ();
-spd_load();
-print "SAD and SPD loaded.\n";
-prog_warn 'info', "loaded SAD and SPD.";
-print "Configuring racoon...";
-exit 1 if racoon_configure($fmt{'brief'}) < 0;
-print "done.\n";
-prog_warn 'info', "configured racoon.";
-return 1;
-}
+	print "Loading SAD and SPD...\n";
+	sad_init ();
+	spd_init ();
+	spd_load();
+	print "SAD and SPD loaded.\n";
+	prog_warn 'info', "loaded SAD and SPD.";
+	print "Configuring racoon...";
+	exit 1 if racoon_configure($fmt{'brief'}) < 0;
+	print "done.\n";
+	prog_warn 'info', "configured racoon.";
+	return 1;
+	}
 
-# flush 
-sub ipsec_flush () {
-print "Flushing SAD and SPD...\n";
-# Flush the SAD
-sad_flush ();
+	# flush 
+	sub ipsec_flush () {
+	print "Flushing SAD and SPD...\n";
+	# Flush the SAD
+	sad_flush ();
 
-# Flush the SPD
-spd_flush ();
-print "SAD and SPD flushed.\n";
-prog_warn 'info', "flushed SAD and SPD.";
+	# Flush the SPD
+	spd_flush ();
+	print "SAD and SPD flushed.\n";
+	prog_warn 'info', "flushed SAD and SPD.";
 }
 
 # Read configuration
 sub parse_config () {
-my $line = 0;
-my $barf = 0;
-my $section = "";
-my $connection = "";
-my $peer = "";
-my $stuff = "";
-														      
-open(CONF, "< $conffile")
-	|| prog_die "can't open $conffile - $!";
-														      
-LINE: while (<CONF>) {
-	$line +=1;
-														      
-	# Deal with blank lines
-	if ( m/^\s*$/) {
-		next LINE;
-	}
-														      
-	# Comments
-	if ( m/^[ \t]*#.*$/ ) {
-		next LINE;
-	}
-	# Comments at the end of lines
-	if ( m/^([^#]*)#.*$/ ) {
-		$_ = $1;
-	}
-														      
-	chomp;
-
-	if (! m/^[-\"{}()\[\]_;\%\@\w\s.:\/=]+$/) {
-		prog_warn 0, "bad data in $conffile, line $line:";
-		prog_warn 0, $_;
-		# $barf = 1;
-		next LINE;
-	}
-	
-	if ( m/^\s*SPDADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-		$name = $1;
-		$stuff = $2 . "\n";
-		if ( defined $spdadd{"$name"} ) {
-			$spdadd{"$name"} .= $stuff;
-		} else {
-			$spdadd{"$name"} = $stuff;
-		}
-		next LINE;
-	} elsif ( m/^\s*SADADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-		$name = $1;
-		$stuff = $2 . "\n";
-		if ( defined $sadadd{"$name"} ) {
-			$sadadd{"$name" } .= $stuff;
-		} else {
-			$sadadd{"$name"} = $stuff;
-		}
-		next LINE;
-	} elsif ( m/^\s*REMOTE\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-		$name = $1;
-		$stuff = $2 . "\n";
-		if ( defined $remote{"$name"} ) {
-			$remote{"$name" } .= $stuff;
-		} else {
-			$remote{"$name"} = $stuff;
-		}
-		next LINE;
-
-	} elsif ( m/^\s*SAINFO\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-		$name = $1;
-		$stuff = $2 . "\n";
-		if ( defined $sainfo{"$name"} ) {
-			$sainfo{"$name" } .= $stuff;
-		} else {
-			$sainfo{"$name"} = $stuff;
-		}
-		next LINE;
-
-	} elsif ( m/^\s*SADINIT:([\S \t]*)$/i ) {
-		$name = '';
-		$stuff = $1 . "\n";
-		if ( defined $sadinit ) {
-			$sadinit .= $stuff;
-		} else {
-			$sadinit = $stuff;
-		}
-		next LINE;
-	} elsif ( m/^\s*SPDINIT:([\S \t]*)$/i ) {
-		$name = '';
-		$stuff = $1 . "\n";
-		if ( defined $spdinit ) {
-			$spdinit .= $stuff;
-		} else {
-			$spdinit = $stuff;
-		}
-		next LINE;
-	} elsif ( m/^\s*RACOONINIT:([\S \t]*)$/i ) {
-		$name = '';
-		$stuff = $1 . "\n";
-		if ( defined $racoon_init ) {
-			$racoon_init .= $stuff;
-		} else {
-			$racoon_init = $stuff;
-		}
-		next LINE;
-
-	} elsif ( m/^\s*CONNECTION\((\%default|\%anonymous|[-_a-z0-9]+)\):\s*$/i ) {
-		$section = 'connection';
-		$connection = lc $1;
-		# Make place holder so that error message gets generated
-		$connection_list{$connection}{'makelive'} = 0;
-		next LINE;
-	} 
-
-	elsif ( m/^\s*PEER\((\%default|\%anonymous|[a-f0-9:\.]+)\):\s*$/i ) {
-		$peer = lc $1;
-		if ( $peer ne '%default' && $peer ne '%anonymous' && ! ip_check_syntax ($peer)) {
-			prog_warn 0, "unrecognised tag in $conffile, line $line:";
-			prog_warn 0, "$_";
-			prog_warn 0, "invalid peer name - $peer";
+	my $line = 0;
+	my $barf = 0;
+	my $section = "";
+	my $connection = "";
+	my $peer = "";
+	my $stuff = "";
+															      
+	open(CONF, "< $conffile")
+		|| prog_die "can't open $conffile - $!";
+															      
+	LINE: while (<CONF>) {
+		$line +=1;
+															      
+		# Deal with blank lines
+		if ( m/^\s*$/) {
 			next LINE;
 		}
-		$section = 'peer';
-		# Make place holder so that error message gets generated
-		$peer_list{$peer}{'makelive'} = 0;
-		next LINE;
-	}
+															      
+		# Comments
+		if ( m/^[ \t]*#.*$/ ) {
+			next LINE;
+		}
+		# Comments at the end of lines
+		if ( m/^([^#]*)#.*$/ ) {
+			$_ = $1;
+		}
+															      
+		chomp;
 
-	elsif  ( m/^\s*GLOBAL:\s*$/i ) {
-		$section = 'global';
-		next LINE;
-	} 
- 
-	elsif ( $section eq 'connection' &&  m/^\s*($conn_proplist):\s*(.+)\s*$/i ) {
-		my $property = lc $1;
-		my $value = $2;
-		$value =~ s/^(.*\S)\s*$/$1/;
-	
-		if ( ! check_property_syntax($section, $property, $value) ) {
-			prog_warn 0, "$connection - unrecognised connection property syntax.";
-			prog_warn 0, "$connection - file $conffile, line $line:";
-			prog_warn 0, error_getmsg($section, $property);
+		if (! m/^[-\"{}()\[\]_;\%\@\w\s.:\/=]+$/) {
+			prog_warn 0, "bad data in $conffile, line $line:";
 			prog_warn 0, $_;
+			# $barf = 1;
+			next LINE;
+		}
+		
+		if ( m/^\s*SPDADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+			$name = $1;
+			$stuff = $2 . "\n";
+			if ( defined $spdadd{"$name"} ) {
+				$spdadd{"$name"} .= $stuff;
+			} else {
+				$spdadd{"$name"} = $stuff;
+			}
+			next LINE;
+		} elsif ( m/^\s*SADADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+			$name = $1;
+			$stuff = $2 . "\n";
+			if ( defined $sadadd{"$name"} ) {
+				$sadadd{"$name" } .= $stuff;
+			} else {
+				$sadadd{"$name"} = $stuff;
+			}
+			next LINE;
+		} elsif ( m/^\s*REMOTE\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+			$name = $1;
+			$stuff = $2 . "\n";
+			if ( defined $remote{"$name"} ) {
+				$remote{"$name" } .= $stuff;
+			} else {
+				$remote{"$name"} = $stuff;
+			}
+			next LINE;
+
+		} elsif ( m/^\s*SAINFO\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+			$name = $1;
+			$stuff = $2 . "\n";
+			if ( defined $sainfo{"$name"} ) {
+				$sainfo{"$name" } .= $stuff;
+			} else {
+				$sainfo{"$name"} = $stuff;
+			}
+			next LINE;
+
+		} elsif ( m/^\s*SADINIT:([\S \t]*)$/i ) {
+			$name = '';
+			$stuff = $1 . "\n";
+			if ( defined $sadinit ) {
+				$sadinit .= $stuff;
+			} else {
+				$sadinit = $stuff;
+			}
+			next LINE;
+		} elsif ( m/^\s*SPDINIT:([\S \t]*)$/i ) {
+			$name = '';
+			$stuff = $1 . "\n";
+			if ( defined $spdinit ) {
+				$spdinit .= $stuff;
+			} else {
+				$spdinit = $stuff;
+			}
+			next LINE;
+		} elsif ( m/^\s*RACOONINIT:([\S \t]*)$/i ) {
+			$name = '';
+			$stuff = $1 . "\n";
+			if ( defined $racoon_init ) {
+				$racoon_init .= $stuff;
+			} else {
+				$racoon_init = $stuff;
+			}
+			next LINE;
+
+		} elsif ( m/^\s*CONNECTION\((\%default|\%anonymous|[-_a-z0-9]+)\):\s*$/i ) {
+			$section = 'connection';
+			$connection = lc $1;
+			# Make place holder so that error message gets generated
+			$connection_list{$connection}{'makelive'} = 0;
+			next LINE;
+		} 
+
+		elsif ( m/^\s*PEER\((\%default|\%anonymous|[a-f0-9:\.]+)\):\s*$/i ) {
+			$peer = lc $1;
+			if ( $peer ne '%default' && $peer ne '%anonymous' && ! ip_check_syntax ($peer)) {
+				prog_warn 0, "unrecognised tag in $conffile, line $line:";
+				prog_warn 0, "$_";
+				prog_warn 0, "invalid peer name - $peer";
+				next LINE;
+			}
+			$section = 'peer';
+			# Make place holder so that error message gets generated
+			$peer_list{$peer}{'makelive'} = 0;
+			next LINE;
+		}
+
+		elsif  ( m/^\s*GLOBAL:\s*$/i ) {
+			$section = 'global';
+			next LINE;
+		} 
+	 
+		elsif ( $section eq 'connection' &&  m/^\s*($conn_proplist):\s*(.+)\s*$/i ) {
+			my $property = lc $1;
+			my $value = $2;
+			$value =~ s/^(.*\S)\s*$/$1/;
+		
+			if ( ! check_property_syntax($section, $property, $value) ) {
+				prog_warn 0, "$connection - unrecognised connection property syntax.";
+				prog_warn 0, "$connection - file $conffile, line $line:";
+				prog_warn 0, error_getmsg($section, $property);
+				prog_warn 0, $_;
+				$connection_list{$connection}{'syntax_error'} = 1;
+				next LINE;
+			}
+			$value = value_lc($section, $property, $value);
+			$connection_list{$connection}{$property} = $value; 
+		} elsif ( $section eq 'connection' ) {
+			prog_warn 0, "$connection - unrecognised tag in $conffile, line $line:";
+			prog_warn 0, $_;
+			prog_warn 0, "$connection - allowed tags are $conn_proplist";
 			$connection_list{$connection}{'syntax_error'} = 1;
 			next LINE;
 		}
-		$value = value_lc($section, $property, $value);
-		$connection_list{$connection}{$property} = $value; 
-	} elsif ( $section eq 'connection' ) {
-		prog_warn 0, "$connection - unrecognised tag in $conffile, line $line:";
-		prog_warn 0, $_;
-		prog_warn 0, "$connection - allowed tags are $conn_proplist";
-		$connection_list{$connection}{'syntax_error'} = 1;
-		next LINE;
-	}
 
-	elsif ( $section eq 'peer' &&  m/^\s*($peer_proplist):\s*(.+)\s*$/i ) {
-		my $property = lc $1;
-		my $value = $2;
-		$value =~ s/^(.*\S)\s*$/$1/;
-	
-		if ( ! check_property_syntax($section, $property, $value) ) {
-			prog_warn 0, "$peer - unrecognised peer property syntax or unreadable file(s).";
-			prog_warn 0, "$peer - file $conffile, line $line:";
-			prog_warn 0, error_getmsg($section, $property);
+		elsif ( $section eq 'peer' &&  m/^\s*($peer_proplist):\s*(.+)\s*$/i ) {
+			my $property = lc $1;
+			my $value = $2;
+			$value =~ s/^(.*\S)\s*$/$1/;
+		
+			if ( ! check_property_syntax($section, $property, $value) ) {
+				prog_warn 0, "$peer - unrecognised peer property syntax or unreadable file(s).";
+				prog_warn 0, "$peer - file $conffile, line $line:";
+				prog_warn 0, error_getmsg($section, $property);
+				prog_warn 0, $_;
+				$peer_list{$peer}{'syntax_error'} = 1;
+				next LINE;
+			}
+			# $value = value_lc($section, $property, $value);
+			$peer_list{$peer}{$property} = $value; 
+		} elsif ( $section eq 'peer' ) {
+			prog_warn 0, "$peer - unrecognised tag in $conffile, line $line:";
 			prog_warn 0, $_;
+			prog_warn 0, "$peer - allowed tags are $peer_proplist";
 			$peer_list{$peer}{'syntax_error'} = 1;
 			next LINE;
 		}
-		# $value = value_lc($section, $property, $value);
-		$peer_list{$peer}{$property} = $value; 
-	} elsif ( $section eq 'peer' ) {
-		prog_warn 0, "$peer - unrecognised tag in $conffile, line $line:";
-		prog_warn 0, $_;
-		prog_warn 0, "$peer - allowed tags are $peer_proplist";
-		$peer_list{$peer}{'syntax_error'} = 1;
-		next LINE;
-	}
 
-	elsif ( $section eq 'global' && m /^\s*($global_proplist):\s*(.+)\s*$/i ) {
-		my $property = lc $1;
-		my $value = $2;
-		$value =~  s/^(.*\S)\s*$/$1/;
-		
-		if (! check_property_syntax($section, $property, $value)) {
-			prog_warn 0, "global - unrecognised global property syntax or unreadable file(s).";
-			prog_warn 0, "global - file $conffile, line $line:";
-			prog_warn 0, error_getmsg($section, $property);
+		elsif ( $section eq 'global' && m /^\s*($global_proplist):\s*(.+)\s*$/i ) {
+			my $property = lc $1;
+			my $value = $2;
+			$value =~  s/^(.*\S)\s*$/$1/;
+			
+			if (! check_property_syntax($section, $property, $value)) {
+				prog_warn 0, "global - unrecognised global property syntax or unreadable file(s).";
+				prog_warn 0, "global - file $conffile, line $line:";
+				prog_warn 0, error_getmsg($section, $property);
+				prog_warn 0, $_;
+				prog_warn 0, "global - allowed tags are $global_proplist";
+				$global{'deadly_error'} = 1;
+				next LINE;
+			}
+			$value = value_lc($section, $property, $value);
+			$global{$property} = $value;
+
+		} elsif ( $section eq 'global' ) {
+			prog_warn 0, "$global - unrecognised tag in $conffile, line $line:";
 			prog_warn 0, $_;
-			prog_warn 0, "global - allowed tags are $global_proplist";
-			$global{'deadly_error'} = 1;
+			prog_warn 0, "$global - allowed tags are $global_proplist";
+		}
+
+		else {
+			prog_warn 0, "unrecognised tag in $conffile, line $line:";
+			prog_warn 0, $_;
 			next LINE;
 		}
-		$value = value_lc($section, $property, $value);
-		$global{$property} = $value;
-
-	} elsif ( $section eq 'global' ) {
-		prog_warn 0, "$global - unrecognised tag in $conffile, line $line:";
-		prog_warn 0, $_;
-		prog_warn 0, "$global - allowed tags are $global_proplist";
+															      
 	}
-
-	else {
-		prog_warn 0, "unrecognised tag in $conffile, line $line:";
-		prog_warn 0, $_;
-		next LINE;
+	close (CONF);
+															      
+	if ( $barf ) {
+		exit 1;
 	}
-														      
-}
-close (CONF);
-														      
-if ( $barf ) {
-	exit 1;
-}
-														      
-# apply defaults
-$spdadd{'%default'} = $spdadd_default if ( ! defined $spdadd{'%default'} );
-$sadadd{'%default'} = $sadadd_default if ( ! defined $sadadd{'%default'} );
-$remote{'%default'} = $remote_default if ( ! defined $remote{'%default'} );
-$sainfo{'%default'} = $sainfo_default if ( ! defined $sainfo{'%default'} );
-$racoon_init = $racoon_init_default if ( ! defined $racoon_init );
-global_fillin_defaults();
-conn_fillin_defaults();
-peer_fillin_defaults();
-peer_check_required();
-conn_check_required();
-global_check_required();
+															      
+	# apply defaults
+	$spdadd{'%default'} = $spdadd_default if ( ! defined $spdadd{'%default'} );
+	$sadadd{'%default'} = $sadadd_default if ( ! defined $sadadd{'%default'} );
+	$remote{'%default'} = $remote_default if ( ! defined $remote{'%default'} );
+	$sainfo{'%default'} = $sainfo_default if ( ! defined $sainfo{'%default'} );
+	$racoon_init = $racoon_init_default if ( ! defined $racoon_init );
+	global_fillin_defaults();
+	conn_fillin_defaults();
+	peer_fillin_defaults();
+	peer_check_required();
+	conn_check_required();
+	global_check_required();
 };
 
 # Lower case value function
 sub value_lc ($$$) {
-my $section = shift;
-my $property = shift;
-my $value = shift;
+	my $section = shift;
+	my $property = shift;
+	my $value = shift;
 
-my $ptype = get_proptype($section, $property);
+	my $ptype = get_proptype($section, $property);
 
-if ( $ptype eq 'path_conf_file' ) {
-	$value = $value;
-} elsif ( $ptype eq 'path_generated_file' ) {
-	$value = $value;
-} elsif ( $ptype eq 'shell_command' ) {
-	$value = $value;
-} elsif ( $ptype eq 'path_certificate' ) {
-	$value = $value;
-} elsif ( $ptype eq 'certificate' ) {
-	if ( $value =~ m/^\s*x509\s+(\S+)\s+(\S+)\s*$/i ) {
-		$value = "x509 $1 $2";
+	if ( $ptype eq 'path_conf_file' ) {
+		$value = $value;
+	} elsif ( $ptype eq 'path_generated_file' ) {
+		$value = $value;
+	} elsif ( $ptype eq 'shell_command' ) {
+		$value = $value;
+	} elsif ( $ptype eq 'path_certificate' ) {
+		$value = $value;
+	} elsif ( $ptype eq 'certificate' ) {
+		if ( $value =~ m/^\s*x509\s+(\S+)\s+(\S+)\s*$/i ) {
+			$value = "x509 $1 $2";
+		}
+	} elsif ( $ptype =~ 'peers_certfile' ) {
+		if ( $value =~ m/^\s*dnssec\s*$/i ) {
+			$value = "dnssec";
+		} elsif ( $value =~ m/^\s*(plain_rsa|x509)\s+(\S+)\s*$/i ) {
+			$value = "$1 $2";
+		}
+	} elsif ( $ptype eq 'identity' ) {
+		if ( $value =~ m/^\s*keyid\s+(\S+)\s*$/i ) {
+			$value = "keyid $1"
+		}
+	} else {
+		$value = lc $value;
 	}
-} elsif ( $ptype =~ 'peers_certfile' ) {
-	if ( $value =~ m/^\s*dnssec\s*$/i ) {
-		$value = "dnssec";
-	} elsif ( $value =~ m/^\s*(plain_rsa|x509)\s+(\S+)\s*$/i ) {
-		$value = "$1 $2";
-	}
-} elsif ( $ptype eq 'identity' ) {
-	if ( $value =~ m/^\s*keyid\s+(\S+)\s*$/i ) {
-		$value = "keyid $1"
-	}
-} else {
-	$value = lc $value;
-}
-return $value;
+	return $value;
 }
 
 # Error mesage lookups
 sub error_getmsg ($$) {
-my $section = shift;
-my $property = shift;
-my $ptype = get_proptype($section, $property);
+	my $section = shift;
+	my $property = shift;
+	my $ptype = get_proptype($section, $property);
 
-return "$property only takes $prop_syntaxhash{$ptype}";
+	return "$property only takes $prop_syntaxhash{$ptype}";
 }
 
 #Fill in global defaults
 sub global_fillin_defaults () {
-foreach $prop ('path_pre_shared_key', 'path_certificate') {
-	if ( defined $global{$prop} && $global{$prop} =~ m/^"?(\S+)"?$/i ) {
-		$global{$prop} = "\"${1}\"";
+	foreach $prop ('path_pre_shared_key', 'path_certificate') {
+		if ( defined $global{$prop} && $global{$prop} =~ m/^"?(\S+)"?$/i ) {
+			$global{$prop} = "\"${1}\"";
+		}
 	}
-}
-foreach $prop ('path_racoon_conf', 'racoon_command', 'racoon_pid_file') {
-	if ( defined $global{$prop} && $global{$prop} =~ m/^"(\S+)"$/i ) {
-		$global{$prop} = "${1}";
+	foreach $prop ('path_racoon_conf', 'racoon_command', 'racoon_pid_file') {
+		if ( defined $global{$prop} && $global{$prop} =~ m/^"(\S+)"$/i ) {
+			$global{$prop} = "${1}";
+		}
 	}
-}
 }
 
 sub global_check_required () {
-if ( $global{'deadly_error'} ) {
-	prog_warn 'err', "deadly error in global configuration - exiting.";
-	exit 10;
-}
+	if ( $global{'deadly_error'} ) {
+		prog_warn 'err', "deadly error in global configuration - exiting.";
+		exit 10;
+	}
 }
 
 #Check synax of IP address
 sub ip_check_syntax ($) {
-my $ip = shift;
-if ( $ip =~ m/^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/ ) {
-	return 1 if ( $1 >=0 && $1 <= 255 && $2 >= 0 && $2 <= 255
-		&& $3 >= 0 && $3 <= 255 && $4 >= 0 && $4 <= 255 );
-} elsif ( $ip =~ m/^[0-9a-f]{1,4}:[0-9a-f:]*:[0-9a-f]{0,4}$/i ) {
-	my @dbytes = split  /:/, $ip;
-	my $valid = 1;
-	foreach my $v ( @dbytes ) {
-		if ( $v ne '' && $v !~ m/^[0-9a-f]{1,4}$/i && $v < 0 && $v > 0xffff )
-			{ $valid = 0; }
+	my $ip = shift;
+	if ( $ip =~ m/^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$/ ) {
+		return 1 if ( $1 >=0 && $1 <= 255 && $2 >= 0 && $2 <= 255
+			&& $3 >= 0 && $3 <= 255 && $4 >= 0 && $4 <= 255 );
+	} elsif ( $ip =~ m/^[0-9a-f]{1,4}:[0-9a-f:]*:[0-9a-f]{0,4}$/i ) {
+		my @dbytes = split  /:/, $ip;
+		my $valid = 1;
+		foreach my $v ( @dbytes ) {
+			if ( $v ne '' && $v !~ m/^[0-9a-f]{1,4}$/i && $v < 0 && $v > 0xffff )
+				{ $valid = 0; }
+		}
+		return 1 if $valid;
 	}
-	return 1 if $valid;
-}
-return 0;	
+	return 0;	
 }
 
 
 # Check syntax
 
 sub get_proptype($$) {
-my $section = shift;
-my $property = shift;
-my $ptype;
+	my $section = shift;
+	my $property = shift;
+	my $ptype;
 
-if ( $property =~ m/^(.*)\[[0-9a-z]+\]$/ ) {
-	$property = $1;
-}
-$ptype = $prop_typehash{$section}{$property};	
+	if ( $property =~ m/^(.*)\[[0-9a-z]+\]$/ ) {
+		$property = $1;
+	}
+	$ptype = $prop_typehash{$section}{$property};	
 
-return $ptype;
+	return $ptype;
 }
 
 sub check_property_syntax ($$$) {
-my $section = shift;
-my $property = shift;
-my $value = shift;
-my ($protoname, $protoaliases, $protonumber);
-my $ptype;
+	my $section = shift;
+	my $property = shift;
+	my $value = shift;
+	my ($protoname, $protoaliases, $protonumber);
+	my $ptype;
 
-$ptype = get_proptype($section,$property);
+	$ptype = get_proptype($section,$property);
 
-if ( $ptype eq 'boolean' ) {
-	$value =~ m/^(enabled|disabled|true|false|up|down|on|off|yes|no|0|1)$/i && return 1;
-} elsif ( $ptype eq 'encap' ) {
-	$value =~ m/^(ah|esp)$/i && return 1;
-} elsif ( $ptype eq 'mode' ) {
-	$value =~ m/^(transport|tunnel)$/i && return 1;
-} elsif ( $ptype eq 'template_name' ) {
-	$value =~ m/^(%default|[-a-z0-9_]+)$/i && return 1;
-} elsif ( $ptype eq 'phase1_exchange_mode' ) {
-	$value =~ m/^((main|aggressive|base),? ?){1,3}$/i && return 1;
-} elsif ( $ptype eq 'phase1_encryption' ) {
-	$value =~ m/^(aes|des|3des|blowfish|cast128)$/i && return 1;
-} elsif ( $ptype eq 'hash_algorithm' ) {
-	$value =~ m/^(md5|sha1)$/i && return 1;
-} elsif ( $ptype eq 'phase1_auth_method' ) {
-	$value =~ m/^(pre_shared_key|rsasig)$/i && return 1;
-} elsif ( $ptype eq 'switch' ) {
-	$value =~ m/^(on|off)$/i && return 1;
-} elsif ( $ptype eq 'lifetime' ) {
-	$value =~ m/^time\s+[0-9]+\s+(hour|hours|min|mins|minutes|sec|secs|seconds)$/i && return 1;
-} elsif ( $ptype eq 'phase2_encryption' ) {
-	$value =~ m/^((aes|des|3des|des_iv64|des_iv32|rc5|rc4|idea|3idea|cast128|blowfish|null_enc|twofish|rijndael),? ?)+$/i && return 1;
-} elsif ( $ptype eq 'phase2_auth_algorithm' ) {
-	$value =~ m/^((des|3des|des_iv64|des_iv32|hmac_md5|hmac_sha1|non_auth),? ?)+$/i && return 1;
-} elsif ( $ptype eq 'dh_group' ) {
-	$value =~ m/^(modp768|modp1024|modp1536|1|2|5)$/i && return 1;
-} elsif ( $ptype eq 'pfs_group' ) {
-	$value =~ m/^(none|modp768|modp1024|modp1536|1|2|5)$/i && return 1;
-} elsif ( $ptype eq 'level') {
-	$value =~ m/^(default|use|require|unique)$/i && return 1;
-} elsif ( $ptype eq 'log') {
-	$value =~ m/^(notify|debug|debug2)$/i && return 1;
-} elsif ( $ptype eq 'proposal_check' ) {
-	$value =~ m/^(obey|strict|claim|exact)$/i && return 1;
-} elsif ( $ptype eq 'nat_traversal' ) {
-	$value =~ m/^(on|off|force)$/i && return 1;
-} elsif ( $ptype =~ 'nonce_size' ) {
+	if ( $ptype eq 'boolean' ) {
+		$value =~ m/^(enabled|disabled|true|false|up|down|on|off|yes|no|0|1)$/i && return 1;
+	} elsif ( $ptype eq 'encap' ) {
+		$value =~ m/^(ah|esp)$/i && return 1;
+	} elsif ( $ptype eq 'mode' ) {
+		$value =~ m/^(transport|tunnel)$/i && return 1;
+	} elsif ( $ptype eq 'template_name' ) {
+		$value =~ m/^(%default|[-a-z0-9_]+)$/i && return 1;
+	} elsif ( $ptype eq 'phase1_exchange_mode' ) {
+		$value =~ m/^((main|aggressive|base),? ?){1,3}$/i && return 1;
+	} elsif ( $ptype eq 'phase1_encryption' ) {
+		$value =~ m/^(aes|des|3des|blowfish|cast128)$/i && return 1;
+	} elsif ( $ptype eq 'hash_algorithm' ) {
+		$value =~ m/^(md5|sha1)$/i && return 1;
+	} elsif ( $ptype eq 'phase1_auth_method' ) {
+		$value =~ m/^(pre_shared_key|rsasig)$/i && return 1;
+	} elsif ( $ptype eq 'switch' ) {
+		$value =~ m/^(on|off)$/i && return 1;
+	} elsif ( $ptype eq 'lifetime' ) {
+		$value =~ m/^time\s+[0-9]+\s+(hour|hours|min|mins|minutes|sec|secs|seconds)$/i && return 1;
+	} elsif ( $ptype eq 'phase2_encryption' ) {
+		$value =~ m/^((aes|des|3des|des_iv64|des_iv32|rc5|rc4|idea|3idea|cast128|blowfish|null_enc|twofish|rijndael),? ?)+$/i && return 1;
+	} elsif ( $ptype eq 'phase2_auth_algorithm' ) {
+		$value =~ m/^((des|3des|des_iv64|des_iv32|hmac_md5|hmac_sha1|non_auth),? ?)+$/i && return 1;
+	} elsif ( $ptype eq 'dh_group' ) {
+		$value =~ m/^(modp768|modp1024|modp1536|1|2|5)$/i && return 1;
+	} elsif ( $ptype eq 'pfs_group' ) {
+		$value =~ m/^(none|modp768|modp1024|modp1536|1|2|5)$/i && return 1;
+	} elsif ( $ptype eq 'level') {
+		$value =~ m/^(default|use|require|unique)$/i && return 1;
+	} elsif ( $ptype eq 'log') {
+		$value =~ m/^(notify|debug|debug2)$/i && return 1;
+	} elsif ( $ptype eq 'proposal_check' ) {
+		$value =~ m/^(obey|strict|claim|exact)$/i && return 1;
+	} elsif ( $ptype eq 'nat_traversal' ) {
+		$value =~ m/^(on|off|force)$/i && return 1;
+	} elsif ( $ptype =~ 'nonce_size' ) {
 	$value =~ m/^[0-9]{1,3}$/ && $value >= 8 && $value <= 256 && return 1;
 	} elsif ( $ptype eq 'listen' ) {
 		if ( $value =~ m/^[0-9a-f:\.]+$/i ) {
