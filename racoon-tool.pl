@@ -112,20 +112,21 @@ my %peer_list = (	'%default' => {
 			} );
 
 # Connection related stuff
-my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|ul_proto|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression';
+my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|ul_proto|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression|id_type_subnet';
 my @conn_required_props = ( 'src_ip', 'dst_ip');
 my %connection_list = ( '%default' => {
 			'admin_status' 		=> 'disabled',
 			'upperspec' 		=> 'any',
 			'ul_proto'		=> 'any',
 			'encap' 		=> 'esp',
-			'level' 		=> 'unique',
+			'level' 		=> 'require',
 			'spdadd_template' 	=> '%default',
 			'sadadd_template' 	=> '%default',
 			'sainfo_template' 	=> '%default',
 			'pfs_group'		=> 'modp1024',
 			'encryption_algorithm'	=> 'aes,3des',
-			'authentication_algorithm'	=> 'hmac_sha1,hmac_md5'
+			'authentication_algorithm'	=> 'hmac_sha1,hmac_md5',
+			'id_type'		=> 'address'
 			},
 			'%anonymous'		=> {
 			'admin_status'		=> 'disabled'
@@ -149,7 +150,8 @@ my %prop_typehash = ( 	'connection'	=> {
 			'lifetime'		=> 'lifetime',
 			'encryption_algorithm'	=> 'phase2_encryption',
 			'authentication_algorithm' => 'phase2_auth_algorithm',
-			'compression'		=> 'boolean' 
+			'compression'		=> 'boolean',
+			'id_type'		=> 'id_type'
 			},
 			'peer'		=> {
 			'exchange_mode' 	=> 'phase1_exchange_mode',
@@ -217,7 +219,8 @@ my %prop_syntaxhash = (	'range'		=> '{ip-address|ip-address/masklen|ip-address[p
 			'listen'		=> '{ip-address} [[port]]',
 			'proposal_check'	=> '{obey|strict|claim|exact}',
 			'nat_traversal'		=> '{on|off|force}',
-			'nonce_size'		=> '{number} - between 8 and 256'
+			'nonce_size'		=> '{number} - between 8 and 256',
+			'id_type'		=> '{address|subnet} - ID type of ISAKMP Phase II identifier'
 			);
 
 my %bool_val = ( 	'enabled' => 1,
@@ -293,7 +296,7 @@ EOF
 		);
 
 my $sainfo_default = <<'EOF';
-sainfo address ___local_id___ ___ul_proto___ address ___remote_id___ ___ul_proto___ {
+sainfo ___id_type___ ___local_id___ ___ul_proto___ ___id_type___ ___remote_id___ ___ul_proto___ {
         encryption_algorithm ___encryption_algorithm___;
         authentication_algorithm ___authentication_algorithm___;
 	compression_algorithm deflate;
@@ -799,7 +802,7 @@ EOF
 
 		my $id_string = $hndl->{'local_id'} . '_' . $hndl->{'remote_id'};
 		if ( grep { $id_string eq $_ } @sainfo_done) {
-			print RCF "\n";
+			print RCF "# using sainfo above here\n\n";
 			next;
 		}
 		push @sainfo_done, $id_string;
@@ -1217,7 +1220,7 @@ sub parse_spd (\@\%) {
 			$direction = $1;
 			push @$spd_list, { 'src_range', $src_range, 'dst_range', $dst_range, 
 					'upperspec', $upperspec, 'direction', $direction };
-			print "[ src_range=$src_range, dst_range=$dst_range, upperspec=$upperspec, direction=$direction ]\n";
+			# print "[ src_range=$src_range, dst_range=$dst_range, upperspec=$upperspec, direction=$direction ]\n";
 		}
 	}
 
