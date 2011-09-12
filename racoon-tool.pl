@@ -112,7 +112,7 @@ my %peer_list = (	'%default' => {
 			} );
 
 # Connection related stuff
-my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|ul_proto|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression|id_type_subnet';
+my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|ul_proto|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression|id_type';
 my @conn_required_props = ( 'src_ip', 'dst_ip');
 my %connection_list = ( '%default' => {
 			'admin_status' 		=> 'disabled',
@@ -206,8 +206,8 @@ my %prop_syntaxhash = (	'range'		=> '{ip-address|ip-address/masklen|ip-address[p
 			'phase1_auth_method'	=> '{pre_shared_key|rsasig}',
 			'switch'		=> '{on|off}',
 			'lifetime'		=> '{time} {integer} {hour|hours|min|mins|minutes|sec|secs|seconds}',
-			'phase2_encryption'	=> '{aes|des|3des|des_iv64|des_iv32|rc5|rc4|idea|3idea|cast128|blowfish|null_enc|twofish|rijndael}',
-			'phase2_auth_algorithm'	=> '{aes|des|3des|des_iv64|des_iv32|hmac_md5|hmac_sha1|non_auth}',
+			'phase2_encryption'	=> '{des|3des|des_iv64|des_iv32|rc5|rc4|idea|3idea|cast128|blowfish|null_enc|twofish|rijndael|aes|camellia}',
+			'phase2_auth_algorithm'	=> '{des|3des|des_iv64|des_iv32|hmac_md5|hmac_sha1|hmac_sha256|hmac_sha384|hmac_sha512|non_auth}',
 			'identifier'		=> '{address [ip-address]|fqdn dns-name|user_fqdn user@dns-name|keyid file-name|asn1dn [asn1-name]}',
 			'certificate'		=> '{x509 cert-file privkey-file}',
 			'peers_certfile'	=> '{x509|plain_rsa|dnssec} {cert-file}',
@@ -1650,6 +1650,10 @@ sub check_property_syntax ($$$) {
 
 	if ( $ptype eq 'boolean' ) {
 		$value =~ m/^(enabled|disabled|true|false|up|down|on|off|yes|no|0|1)$/i && return 1;
+	} elsif ( $ptype eq 'ul_proto' ) {
+		$value =~ m/^(any|ip4|ip6)$/i && return 1;
+	} elsif ( $ptype eq 'id_type' ) {
+		$value =~ m/^(address|subnet)$/i && return 1;
 	} elsif ( $ptype eq 'encap' ) {
 		$value =~ m/^(ah|esp)$/i && return 1;
 	} elsif ( $ptype eq 'mode' ) {
@@ -1669,9 +1673,9 @@ sub check_property_syntax ($$$) {
 	} elsif ( $ptype eq 'lifetime' ) {
 		$value =~ m/^time\s+[0-9]+\s+(hour|hours|min|mins|minutes|sec|secs|seconds)$/i && return 1;
 	} elsif ( $ptype eq 'phase2_encryption' ) {
-		$value =~ m/^((aes|des|3des|des_iv64|des_iv32|rc5|rc4|idea|3idea|cast128|blowfish|null_enc|twofish|rijndael),? ?)+$/i && return 1;
+		$value =~ m/^((des|3des|des_iv64|des_iv32|rc5|rc4|idea|3idea|cast128|blowfish|null_enc|twofish|rijndael|aes|camellia),? ?)+$/i && return 1;
 	} elsif ( $ptype eq 'phase2_auth_algorithm' ) {
-		$value =~ m/^((des|3des|des_iv64|des_iv32|hmac_md5|hmac_sha1|non_auth),? ?)+$/i && return 1;
+		$value =~ m/^((des|3des|des_iv64|des_iv32|hmac_md5|hmac_sha1|hmac_sha256|hmac_sha384|hmac_sha512|non_auth),? ?)+$/i && return 1;
 	} elsif ( $ptype eq 'dh_group' ) {
 		$value =~ m/^(modp768|modp1024|modp1536|1|2|5)$/i && return 1;
 	} elsif ( $ptype eq 'pfs_group' ) {
