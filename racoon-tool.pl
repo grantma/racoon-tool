@@ -73,6 +73,7 @@ $setkey_cmd = "/usr/sbin/setkey";
 $confdir = "/etc/racoon";
 $vardir = "/var/lib/racoon";
 $conffile = "${confdir}/racoon-tool.conf";
+$conffiledir = "${confdir}/racoon-tool.conf.d";
 $less_cmd = "/usr/bin/less";
 $more_cmd = "/bin/more";
 $pager_cmd =  ( -x $less_cmd ? $less_cmd : $more_cmd );
@@ -1320,207 +1321,221 @@ sub parse_config () {
 	my $connection = "";
 	my $peer = "";
 	my $stuff = "";
-															      
-	open(CONF, "< $conffile")
-		|| prog_die "can't open $conffile - $!";
-															      
-	LINE: while (<CONF>) {
-		$line +=1;
-															      
-		# Deal with blank lines
-		if ( m/^\s*$/) {
-			next LINE;
-		}
-															      
-		# Comments
-		if ( m/^[ \t]*#.*$/ ) {
-			next LINE;
-		}
-		# Comments at the end of lines
-		if ( m/^([^#]*)#.*$/ ) {
-			$_ = $1;
-		}
-															      
-		chomp;
+	my @conffiles = ();
 
-		if (! m/^[-\"{}()\[\]_;\%\@\w\s.:\/=]+$/) {
-			prog_warn 0, "bad data in $conffile, line $line:";
-			prog_warn 0, $_;
-			# $barf = 1;
-			next LINE;
-		}
-		
-		if ( m/^\s*SPDADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-			$name = $1;
-			$stuff = $2 . "\n";
-			if ( defined $spdadd{"$name"} ) {
-				$spdadd{"$name"} .= $stuff;
-			} else {
-				$spdadd{"$name"} = $stuff;
-			}
-			next LINE;
-		} elsif ( m/^\s*SADADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-			$name = $1;
-			$stuff = $2 . "\n";
-			if ( defined $sadadd{"$name"} ) {
-				$sadadd{"$name" } .= $stuff;
-			} else {
-				$sadadd{"$name"} = $stuff;
-			}
-			next LINE;
-		} elsif ( m/^\s*REMOTE\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-			$name = $1;
-			$stuff = $2 . "\n";
-			if ( defined $remote{"$name"} ) {
-				$remote{"$name" } .= $stuff;
-			} else {
-				$remote{"$name"} = $stuff;
-			}
-			next LINE;
+	if (-e  "$conffiledir") {
+		opendir(CONFDIR, $conffiledir) || prog_die "can't open $conffiledir - $!";
+		@conffiles = grep { not /^\.{1,2}\z/ or /^.*\.conf$/ } readdir(CONFDIR);
+		@conffiles = map { $conffiledir . '/' . $_ } @conffiles;
+		closedir CONFDIR;
+	}
+	unshift @conffiles, $conffile;
 
-		} elsif ( m/^\s*SAINFO\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
-			$name = $1;
-			$stuff = $2 . "\n";
-			if ( defined $sainfo{"$name"} ) {
-				$sainfo{"$name" } .= $stuff;
-			} else {
-				$sainfo{"$name"} = $stuff;
-			}
-			next LINE;
+	CF: for my $cf (@conffiles) {
 
-		} elsif ( m/^\s*SADINIT:([\S \t]*)$/i ) {
-			$name = '';
-			$stuff = $1 . "\n";
-			if ( defined $sadinit ) {
-				$sadinit .= $stuff;
-			} else {
-				$sadinit = $stuff;
-			}
-			next LINE;
-		} elsif ( m/^\s*SPDINIT:([\S \t]*)$/i ) {
-			$name = '';
-			$stuff = $1 . "\n";
-			if ( defined $spdinit ) {
-				$spdinit .= $stuff;
-			} else {
-				$spdinit = $stuff;
-			}
-			next LINE;
-		} elsif ( m/^\s*RACOONINIT:([\S \t]*)$/i ) {
-			$name = '';
-			$stuff = $1 . "\n";
-			if ( defined $racoon_init ) {
-				$racoon_init .= $stuff;
-			} else {
-				$racoon_init = $stuff;
-			}
-			next LINE;
+		# next CF if ( not -r $cf );
 
-		} elsif ( m/^\s*CONNECTION\((\%default|\%anonymous|[-_a-z0-9]+)\):\s*$/i ) {
-			$section = 'connection';
-			$connection = lc $1;
-			# Make place holder so that error message gets generated
-			$connection_list{$connection}{'makelive'} = 0;
-			next LINE;
-		} 
-
-		elsif ( m/^\s*PEER\((\%default|\%anonymous|[a-f0-9:\.]+)\):\s*$/i ) {
-			$peer = lc $1;
-			if ( $peer ne '%default' && $peer ne '%anonymous' && ! ip_check_syntax ($peer)) {
-				prog_warn 0, "unrecognised tag in $conffile, line $line:";
-				prog_warn 0, "$_";
-				prog_warn 0, "invalid peer name - $peer";
+		open(CONF, "< $cf")
+			|| prog_die "can't open $cf - $!";
+																      
+		LINE: while (<CONF>) {
+			$line +=1;
+																      
+			# Deal with blank lines
+			if ( m/^\s*$/) {
 				next LINE;
 			}
-			$section = 'peer';
-			# Make place holder so that error message gets generated
-			$peer_list{$peer}{'makelive'} = 0;
-			next LINE;
-		}
+																      
+			# Comments
+			if ( m/^[ \t]*#.*$/ ) {
+				next LINE;
+			}
+			# Comments at the end of lines
+			if ( m/^([^#]*)#.*$/ ) {
+				$_ = $1;
+			}
+																      
+			chomp;
 
-		elsif  ( m/^\s*GLOBAL:\s*$/i ) {
-			$section = 'global';
-			next LINE;
-		} 
-	 
-		elsif ( $section eq 'connection' &&  m/^\s*($conn_proplist):\s*(.+)\s*$/i ) {
-			my $property = lc $1;
-			my $value = $2;
-			$value =~ s/^(.*\S)\s*$/$1/;
-		
-			if ( ! check_property_syntax($section, $property, $value) ) {
-				prog_warn 0, "$connection - unrecognised connection property syntax.";
-				prog_warn 0, "$connection - file $conffile, line $line:";
-				prog_warn 0, error_getmsg($section, $property);
+			if (! m/^[-\"{}()\[\]_;\%\@\w\s.:\/=]+$/) {
+				prog_warn 0, "bad data in $cf, line $line:";
 				prog_warn 0, $_;
+				# $barf = 1;
+				next LINE;
+			}
+			
+			if ( m/^\s*SPDADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+				$name = $1;
+				$stuff = $2 . "\n";
+				if ( defined $spdadd{"$name"} ) {
+					$spdadd{"$name"} .= $stuff;
+				} else {
+					$spdadd{"$name"} = $stuff;
+				}
+				next LINE;
+			} elsif ( m/^\s*SADADD\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+				$name = $1;
+				$stuff = $2 . "\n";
+				if ( defined $sadadd{"$name"} ) {
+					$sadadd{"$name" } .= $stuff;
+				} else {
+					$sadadd{"$name"} = $stuff;
+				}
+				next LINE;
+			} elsif ( m/^\s*REMOTE\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+				$name = $1;
+				$stuff = $2 . "\n";
+				if ( defined $remote{"$name"} ) {
+					$remote{"$name" } .= $stuff;
+				} else {
+					$remote{"$name"} = $stuff;
+				}
+				next LINE;
+
+			} elsif ( m/^\s*SAINFO\((\%default|[-_a-z0-9]+)\):([\S \t]*)$/i ) {
+				$name = $1;
+				$stuff = $2 . "\n";
+				if ( defined $sainfo{"$name"} ) {
+					$sainfo{"$name" } .= $stuff;
+				} else {
+					$sainfo{"$name"} = $stuff;
+				}
+				next LINE;
+
+			} elsif ( m/^\s*SADINIT:([\S \t]*)$/i ) {
+				$name = '';
+				$stuff = $1 . "\n";
+				if ( defined $sadinit ) {
+					$sadinit .= $stuff;
+				} else {
+					$sadinit = $stuff;
+				}
+				next LINE;
+			} elsif ( m/^\s*SPDINIT:([\S \t]*)$/i ) {
+				$name = '';
+				$stuff = $1 . "\n";
+				if ( defined $spdinit ) {
+					$spdinit .= $stuff;
+				} else {
+					$spdinit = $stuff;
+				}
+				next LINE;
+			} elsif ( m/^\s*RACOONINIT:([\S \t]*)$/i ) {
+				$name = '';
+				$stuff = $1 . "\n";
+				if ( defined $racoon_init ) {
+					$racoon_init .= $stuff;
+				} else {
+					$racoon_init = $stuff;
+				}
+				next LINE;
+
+			} elsif ( m/^\s*CONNECTION\((\%default|\%anonymous|[-_a-z0-9]+)\):\s*$/i ) {
+				$section = 'connection';
+				$connection = lc $1;
+				# Make place holder so that error message gets generated
+				$connection_list{$connection}{'makelive'} = 0;
+				next LINE;
+			} 
+
+			elsif ( m/^\s*PEER\((\%default|\%anonymous|[a-f0-9:\.]+)\):\s*$/i ) {
+				$peer = lc $1;
+				if ( $peer ne '%default' && $peer ne '%anonymous' && ! ip_check_syntax ($peer)) {
+					prog_warn 0, "unrecognised tag in $cf, line $line:";
+					prog_warn 0, "$_";
+					prog_warn 0, "invalid peer name - $peer";
+					next LINE;
+				}
+				$section = 'peer';
+				# Make place holder so that error message gets generated
+				$peer_list{$peer}{'makelive'} = 0;
+				next LINE;
+			}
+
+			elsif  ( m/^\s*GLOBAL:\s*$/i ) {
+				$section = 'global';
+				next LINE;
+			} 
+		 
+			elsif ( $section eq 'connection' &&  m/^\s*($conn_proplist):\s*(.+)\s*$/i ) {
+				my $property = lc $1;
+				my $value = $2;
+				$value =~ s/^(.*\S)\s*$/$1/;
+			
+				if ( ! check_property_syntax($section, $property, $value) ) {
+					prog_warn 0, "$connection - unrecognised connection property syntax.";
+					prog_warn 0, "$connection - file $cf, line $line:";
+					prog_warn 0, error_getmsg($section, $property);
+					prog_warn 0, $_;
+					$connection_list{$connection}{'syntax_error'} = 1;
+					next LINE;
+				}
+				$value = value_lc($section, $property, $value);
+				$connection_list{$connection}{$property} = $value; 
+			} elsif ( $section eq 'connection' ) {
+				prog_warn 0, "$connection - unrecognised tag in $cf, line $line:";
+				prog_warn 0, $_;
+				prog_warn 0, "$connection - allowed tags are $conn_proplist";
 				$connection_list{$connection}{'syntax_error'} = 1;
 				next LINE;
 			}
-			$value = value_lc($section, $property, $value);
-			$connection_list{$connection}{$property} = $value; 
-		} elsif ( $section eq 'connection' ) {
-			prog_warn 0, "$connection - unrecognised tag in $conffile, line $line:";
-			prog_warn 0, $_;
-			prog_warn 0, "$connection - allowed tags are $conn_proplist";
-			$connection_list{$connection}{'syntax_error'} = 1;
-			next LINE;
-		}
 
-		elsif ( $section eq 'peer' &&  m/^\s*($peer_proplist):\s*(.+)\s*$/i ) {
-			my $property = lc $1;
-			my $value = $2;
-			$value =~ s/^(.*\S)\s*$/$1/;
-		
-			if ( ! check_property_syntax($section, $property, $value) ) {
-				prog_warn 0, "$peer - unrecognised peer property syntax or unreadable file(s).";
-				prog_warn 0, "$peer - file $conffile, line $line:";
-				prog_warn 0, error_getmsg($section, $property);
+			elsif ( $section eq 'peer' &&  m/^\s*($peer_proplist):\s*(.+)\s*$/i ) {
+				my $property = lc $1;
+				my $value = $2;
+				$value =~ s/^(.*\S)\s*$/$1/;
+			
+				if ( ! check_property_syntax($section, $property, $value) ) {
+					prog_warn 0, "$peer - unrecognised peer property syntax or unreadable file(s).";
+					prog_warn 0, "$peer - file $cf, line $line:";
+					prog_warn 0, error_getmsg($section, $property);
+					prog_warn 0, $_;
+					$peer_list{$peer}{'syntax_error'} = 1;
+					next LINE;
+				}
+				# $value = value_lc($section, $property, $value);
+				$peer_list{$peer}{$property} = $value; 
+			} elsif ( $section eq 'peer' ) {
+				prog_warn 0, "$peer - unrecognised tag in $cf, line $line:";
 				prog_warn 0, $_;
+				prog_warn 0, "$peer - allowed tags are $peer_proplist";
 				$peer_list{$peer}{'syntax_error'} = 1;
 				next LINE;
 			}
-			# $value = value_lc($section, $property, $value);
-			$peer_list{$peer}{$property} = $value; 
-		} elsif ( $section eq 'peer' ) {
-			prog_warn 0, "$peer - unrecognised tag in $conffile, line $line:";
-			prog_warn 0, $_;
-			prog_warn 0, "$peer - allowed tags are $peer_proplist";
-			$peer_list{$peer}{'syntax_error'} = 1;
-			next LINE;
-		}
 
-		elsif ( $section eq 'global' && m /^\s*($global_proplist):\s*(.+)\s*$/i ) {
-			my $property = lc $1;
-			my $value = $2;
-			$value =~  s/^(.*\S)\s*$/$1/;
-			
-			if (! check_property_syntax($section, $property, $value)) {
-				prog_warn 0, "global - unrecognised global property syntax or unreadable file(s).";
-				prog_warn 0, "global - file $conffile, line $line:";
-				prog_warn 0, error_getmsg($section, $property);
+			elsif ( $section eq 'global' && m /^\s*($global_proplist):\s*(.+)\s*$/i ) {
+				my $property = lc $1;
+				my $value = $2;
+				$value =~  s/^(.*\S)\s*$/$1/;
+				
+				if (! check_property_syntax($section, $property, $value)) {
+					prog_warn 0, "global - unrecognised global property syntax or unreadable file(s).";
+					prog_warn 0, "global - file $cf, line $line:";
+					prog_warn 0, error_getmsg($section, $property);
+					prog_warn 0, $_;
+					prog_warn 0, "global - allowed tags are $global_proplist";
+					$global{'deadly_error'} = 1;
+					next LINE;
+				}
+				$value = value_lc($section, $property, $value);
+				$global{$property} = $value;
+
+			} elsif ( $section eq 'global' ) {
+				prog_warn 0, "$global - unrecognised tag in $cf, line $line:";
 				prog_warn 0, $_;
-				prog_warn 0, "global - allowed tags are $global_proplist";
-				$global{'deadly_error'} = 1;
+				prog_warn 0, "$global - allowed tags are $global_proplist";
+			}
+
+			else {
+				prog_warn 0, "unrecognised tag in $cf, line $line:";
+				prog_warn 0, $_;
 				next LINE;
 			}
-			$value = value_lc($section, $property, $value);
-			$global{$property} = $value;
-
-		} elsif ( $section eq 'global' ) {
-			prog_warn 0, "$global - unrecognised tag in $conffile, line $line:";
-			prog_warn 0, $_;
-			prog_warn 0, "$global - allowed tags are $global_proplist";
+																      
 		}
-
-		else {
-			prog_warn 0, "unrecognised tag in $conffile, line $line:";
-			prog_warn 0, $_;
-			next LINE;
-		}
-															      
-	}
-	close (CONF);
-															      
+		close (CONF);
+	}											      
+	
 	if ( $barf ) {
 		exit 1;
 	}
