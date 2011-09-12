@@ -199,10 +199,10 @@ my %prop_syntaxhash = (	'range'		=> '{ip-address|ip-address/masklen|ip-address[p
 			'template_name'	=> '{template-name} - can be %default or ^[-a-zA-Z0-9_]+',
 			'level'		=> '{default|use|require|unique}',
 			'phase1_exchange_mode' 	=> '{main|aggressive|base}',
-			'phase1_encryption'	=> '{aes|des|3des|blowfish|cast128}',
-			'hash_algorithm'	=> '{md5|sha1}',
-			'dh_group'		=> '{modp768|modp1024|modp1536|1|2|5}',
-			'pfs_group'		=> '{none|modp768|modp1024|modp1536|1|2|5}',
+			'phase1_encryption'	=> '{des|3des|blowfish|cast128|aes|camellia}',
+			'hash_algorithm'	=> '{md5|sha1|sha256|sha384|sha512}',
+			'dh_group'		=> '{modp768|modp1024|modp1536|modp2048|modp3072|modp4096|modp6144|modp8192|1|2|5|14|15|16|17|18}',
+			'pfs_group'		=> '{none|modp768|modp1024|modp1536|modp2048|modp3072|modp4096|modp6144|modp8192|1|2|5|14|15|16|17|18}',
 			'phase1_auth_method'	=> '{pre_shared_key|rsasig}',
 			'switch'		=> '{on|off}',
 			'lifetime'		=> '{time} {integer} {hour|hours|min|mins|minutes|sec|secs|seconds}',
@@ -1663,9 +1663,9 @@ sub check_property_syntax ($$$) {
 	} elsif ( $ptype eq 'phase1_exchange_mode' ) {
 		$value =~ m/^((main|aggressive|base),? ?){1,3}$/i && return 1;
 	} elsif ( $ptype eq 'phase1_encryption' ) {
-		$value =~ m/^(aes|des|3des|blowfish|cast128)$/i && return 1;
+		$value =~ m/^(des|3des|blowfish|cast128|aes|camellia)$/i && return 1;
 	} elsif ( $ptype eq 'hash_algorithm' ) {
-		$value =~ m/^(md5|sha1)$/i && return 1;
+		$value =~ m/^(md5|sha1|sha256|sha384|sha512)$/i && return 1;
 	} elsif ( $ptype eq 'phase1_auth_method' ) {
 		$value =~ m/^(pre_shared_key|rsasig)$/i && return 1;
 	} elsif ( $ptype eq 'switch' ) {
@@ -1677,9 +1677,9 @@ sub check_property_syntax ($$$) {
 	} elsif ( $ptype eq 'phase2_auth_algorithm' ) {
 		$value =~ m/^((des|3des|des_iv64|des_iv32|hmac_md5|hmac_sha1|hmac_sha256|hmac_sha384|hmac_sha512|non_auth),? ?)+$/i && return 1;
 	} elsif ( $ptype eq 'dh_group' ) {
-		$value =~ m/^(modp768|modp1024|modp1536|1|2|5)$/i && return 1;
+		$value =~ m/^(modp768|modp1024|modp1536|modp2048|modp3072|modp4096|modp6144|modp8192|1|2|5|14|15|16|17|18)$/i && return 1;
 	} elsif ( $ptype eq 'pfs_group' ) {
-		$value =~ m/^(none|modp768|modp1024|modp1536|1|2|5)$/i && return 1;
+		$value =~ m/^(none|modp768|modp1024|modp1536|modp2048|modp3072|modp4096|modp6144|modp8192|1|2|5|14|15|16|17|18)$/i && return 1;
 	} elsif ( $ptype eq 'level') {
 		$value =~ m/^(default|use|require|unique)$/i && return 1;
 	} elsif ( $ptype eq 'log') {
