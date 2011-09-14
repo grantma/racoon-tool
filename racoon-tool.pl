@@ -254,26 +254,26 @@ EOF
 # - echo request (8)
 # - time exceeded (11)
 my $spdadd_transport_ip4_default = <<'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ icmp -P out priority 2 none;
+spdadd ___src_subnet___ ___dst_subnet___ icmp -P out priority 1 none;
 
-spdadd ___dst_subnet___ ___src_subnet___ icmp -P in priority 2 none;
+spdadd ___dst_subnet___ ___src_subnet___ icmp -P in priority 1 none;
 
-spdadd ___src_range___ ___dst_range___ ___upperspec___ -P out priority 1 ipsec
+spdadd ___src_range___ ___dst_range___ ___upperspec___ -P out ipsec
 	___encap___/___mode___/___src_ip___-___dst_ip___/___level___;
 
-spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in priority 1 ipsec
+spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in ipsec
 	___encap___/___mode___/___dst_ip___-___src_ip___/___level___;
 
 EOF
 my $spdadd_transport_ip6_default = <<'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ icmp6 -P out priority 2 none;
+spdadd ___src_subnet___ ___dst_subnet___ icmp6 -P out priority 1 none;
 
-spdadd ___dst_subnet___ ___src_subnet___ icmp6 -P in priority 2 none;
+spdadd ___dst_subnet___ ___src_subnet___ icmp6 -P in priority 1 none;
 
-spdadd ___src_range___ ___dst_range___ ___upperspec___ -P out priority 1 ipsec
+spdadd ___src_range___ ___dst_range___ ___upperspec___ -P out ipsec
 	___encap___/___mode___/___src_ip___-___dst_ip___/___level___;
 
-spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in priority 1 ipsec
+spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in ipsec
 	___encap___/___mode___/___dst_ip___-___src_ip___/___level___;
 
 EOF
@@ -2257,9 +2257,8 @@ sub spd_fill_add ($) {
 			$stuff =~ s/^(\s*spdadd.*out ipsec\s*)$/${1}\n${spdadd_addons{'ipcomp_out'}}/m;
 			$stuff =~ s/^(\s*spdadd.*in ipsec\s*)$/${1}\n${spdadd_addons{'ipcomp_in'}}/m;
 		}
-	} else {
-	}
-	
+	}	
+
 	foreach my $key (keys %$hndl) {
 		$stuff =~ s/___${key}___/$$hndl{$key}/img;
 	}
