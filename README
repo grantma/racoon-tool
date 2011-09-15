@@ -1,0 +1,21 @@
+
+
+Racoon Tool 
+
+is a perl wrapper script for managing setkey and racoon as found on FreeBSD,
+and Debian systems.  In Debian it is shipped as part of the racoon package, and
+is available as a port on FreeBSD. It is licensed under the GNU GPL version 2.
+
+It makes the management of IPSEC for the common tasks of small VPN hubs and
+networks easier, and was originally inspired by FreeSWAN.
+
+It is fully documented in the sample racoon-tool.conf, and provided man pages
+and source code.
+
+It depends on the standard Perl 5.x install found on almost all systems, and I
+believe that it may run with only the perl5-minimal package on Debian and
+Ubuntu. 
+
+To install, just type make install.
+
+Matthew Grant <matthewgrant5@gmail.com> Thu, 15 Sep 2011 14:13:55 +1200
