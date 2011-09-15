@@ -55,36 +55,63 @@ sub basename($$);
 sub openlog($$$);
 sub syslog($$);
 
-$proc_modules = "/proc/modules";
-$kver = `uname -r`; chomp $kver;
-$modpath = "/lib/modules/" . $kver;
-$modpath_ipsec = "$modpath/kernel/net/ipv4";
-$modpath_ipsec6 = "$modpath/kernel/net/ipv6";
-$modpath_xfrm = "$modpath/kernel/net/xfrm";
-$modpath_key = "$modpath/kernel/net/key";
-$modpath_crypto = "$modpath/kernel/crypto";
-$modpath_zlib = "$modpath/kernel/lib/zlib_deflate";
-$modext = ( $kver =~ /^2\.6\.|^3\./ ? ".ko" : ".o" );
-$progname = basename($0, "");
-$proc_ipv4 = "/proc/sys/net/ipv4";
-$proc_ipv6 = "/proc/sys/net/ipv6";
+if ($^O =~ /linux/i ) {
+	$proc_modules = "/proc/modules";
+	$kver = `uname -r`; chomp $kver;
+	$modpath = "/lib/modules/" . $kver;
+	$modpath_ipsec = "$modpath/kernel/net/ipv4";
+	$modpath_ipsec6 = "$modpath/kernel/net/ipv6";
+	$modpath_xfrm = "$modpath/kernel/net/xfrm";
+	$modpath_key = "$modpath/kernel/net/key";
+	$modpath_crypto = "$modpath/kernel/crypto";
+	$modpath_zlib = "$modpath/kernel/lib/zlib_deflate";
+	$modext = ( $kver =~ /^2\.6\.|^3\./ ? ".ko" : ".o" );
+	$proc_ipv4 = "/proc/sys/net/ipv4";
+	$proc_ipv6 = "/proc/sys/net/ipv6";
+} # endif linux
 
-$setkey_cmd = "/usr/sbin/setkey";
-$confdir = "/etc/racoon";
-$vardir = "/var/lib/racoon";
-$conffile = "${confdir}/racoon-tool.conf";
-$conffiledir = "${confdir}/racoon-tool.conf.d";
-$less_cmd = "/usr/bin/less";
-$more_cmd = "/bin/more";
+
+if ($^O =~ /linux|gnukfreebsd/i) {
+	$setkey_cmd = "/usr/sbin/setkey";
+	$confdir = "/etc/racoon";
+	$vardir = "/var/lib/racoon";
+	$conffile = "${confdir}/racoon-tool.conf";
+	$conffiledir = "${confdir}/racoon-tool.conf.d";
+	$racoon_cmd = "/usr/sbin/racoon";
+	$less_cmd = "/usr/bin/less";
+	$more_cmd = "/bin/more";
+} elsif ($^O =~ /freebsd/i) {
+	$setkey_cmd = "/usr/local/sbin/setkey";
+	$confdir = "/usr/local/etc/racoon";
+	$vardir = "/var/db/racoon";
+	$conffile = "${confdir}/racoon-tool.conf";
+	$conffiledir = "${confdir}/racoon-tool.conf.d";
+	$racoon_cmd = "/usr/local/sbin/racoon";
+	$less_cmd = "/usr/bin/less";
+	$more_cmd = "/usr/bin/more";
+} elsif ($^O =~ /netbsd/i) {
+	# This set of paths is a guess, and needs confirmation
+	$setkey_cmd = "/usr/sbin/setkey";
+	$confdir = "/etc/racoon";
+	$vardir = "/var/db/racoon";
+	$conffile = "${confdir}/racoon-tool.conf";
+	$conffiledir = "${confdir}/racoon-tool.conf.d";
+	$racoon_cmd = "/usr/sbin/racoon";
+	$less_cmd = "/usr/bin/less";
+	$more_cmd = "/usr/bin/more";
+} else {
+	prog_die("unsupported platform - '$^O'.");
+}
 $pager_cmd =  ( -x $less_cmd ? $less_cmd : $more_cmd );
 @pager_flags = ( -x $less_cmd ? ( '-MMXEi' ): ());
 # Handle BSD and SYSV ps...
 $ps_cmd = ($^O =~ /bsd/i ? "ps axc" : "ps -e");
 $psf_cmd = ($^O =~ /bsd/i ? "ps axw" : "ps -eo pid,cmd");
-$racoon_cmd = "/usr/sbin/racoon";
+
 %fmt = ( 'normal' => 1, 'brief' => 2, 'comma' => 3 );
 $global_format = $fmt{'normal'};
 local $proc_id = $$;
+$progname = basename($0, "");
 $racoon_kill_delay = 25; # seconds
 
 # global settings hash
@@ -2248,6 +2275,10 @@ sub spd_fill_add ($) {
 			} elsif ($hndl->{'src_range_iptype'} eq 'ip6') {
 				$stuff = $spdadd{'%transport_ip6_default'};
 			}
+			if ($^O !~ /linux/i) {
+				# spd priority only supported on Linux kernels
+				$stuff =~ s/^(\s*spdadd.*(in|out))\s+prio.*(ipsec|discard;|none;)$/${1} ${3}/mg;
+			}	
 		}
 				
 		#  
@@ -2412,7 +2443,10 @@ sub setkey_show ($) {
 }
 
 sub mod_start () {
-	
+
+	# Only do this if on linux
+	return 0 if ($^O !~ /linux/i);
+
 	print "Loading IPSEC/crypto modules...\n";
 
 	# Load cryptographic modules
@@ -2436,6 +2470,9 @@ sub mod_start () {
 
 sub mod_stop () {
 	
+	# Only do this if on linux
+	return 0 if ($^O !~ /linux/i);
+
 	print "Unloading IPSEC/crypto modules...\n";
 
 	# Unload crypto modules
@@ -2573,6 +2610,9 @@ sub mod_unload ($) {
 
 sub mod_ls () {
 	local $module;
+	
+	# Only do this if on linux
+	return 0 if ($^O !~ /linux/i);
 
 	if (@modules > 0) {
 		return 0
