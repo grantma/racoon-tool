@@ -1176,7 +1176,7 @@ sub conn_down (\@\%$;$$) {
 GO:
 	# Delete entries from SPD
 	open( SETKEY, '|-')
-		|| exec ("$setkey_cmd", '-c');
+		|| exec ("$setkey_cmd", '-f', '/dev/stdin');
 
 	foreach my $spdnum ( @spd_to_del ) {
 		my ($spdentry) = grep { $$_{'index'} == $spdnum }  @$spd_list;
@@ -2317,7 +2317,7 @@ sub spd_load (;$) {
 	}
 
 	open ( SETKEY, '|-' )
-		|| exec ("$setkey_cmd -c 2>&1 | $0 -l" );
+		|| exec ("$setkey_cmd -f /dev/stdin 2>&1 | $0 -l" );
 	for my $connection ( @conns ) {
 		next if $connection eq '%default';
 		next if $connection eq '%anonymous';
@@ -2348,7 +2348,7 @@ EOF
 # Initialise the SPD
 sub spd_init() {
 	open ( SETKEY, '|-' )
-		|| exec ($setkey_cmd, '-c');
+		|| exec ($setkey_cmd, '-f', '/dev/stdin');
 	$spdinit = '' if ! defined $spdinit;
 	print SETKEY <<"EOF";
 spdflush;
@@ -2362,7 +2362,7 @@ EOF
 # Initialise the SAD
 sub sad_init() {
 	open ( SETKEY, '|-' )
-		|| exec ($setkey_cmd, '-c');
+		|| exec ($setkey_cmd, '-f', '/dev/stdin');
 	$sadinit = '' if ! defined $sadinit;
 	print SETKEY <<"EOF";
 $sadinit
