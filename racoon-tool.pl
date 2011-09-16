@@ -140,7 +140,7 @@ my %peer_list = (	'%default' => {
 			} );
 
 # Connection related stuff
-my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression|id_type';
+my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|upperspec|encap|mode|level|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression|id_type|auto_ah_on_esp|always_ah_on_esp';
 my @conn_required_props = ( 'src_ip', 'dst_ip');
 my %connection_list = ( '%default' => {
 			'admin_status' 		=> 'disabled',
@@ -153,7 +153,9 @@ my %connection_list = ( '%default' => {
 			'pfs_group'		=> 'modp1024',
 			'encryption_algorithm'	=> 'aes,3des',
 			'authentication_algorithm'	=> 'hmac_sha1,hmac_md5',
-			'id_type'		=> 'address'
+			'id_type'		=> 'address',
+			'auto_ah_on_esp'	=> 'on',
+			'always_ah_on_esp'	=> 'off'
 			},
 			'%anonymous'		=> {
 			'admin_status'		=> 'disabled'
@@ -177,7 +179,9 @@ my %prop_typehash = ( 	'connection'	=> {
 			'encryption_algorithm'	=> 'phase2_encryption',
 			'authentication_algorithm' => 'phase2_auth_algorithm',
 			'compression'		=> 'boolean',
-			'id_type'		=> 'id_type'
+			'id_type'		=> 'id_type',
+			'auto_ah_on_esp'	=> 'boolean',
+			'always_ah_on_esp'	=> 'boolean'
 			},
 			'peer'		=> {
 			'exchange_mode' 	=> 'phase1_exchange_mode',
@@ -271,8 +275,10 @@ spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in ipsec
 	___encap___/___mode___/___dst_ip___-___src_ip___/___level___;
 
 EOF
-%spdadd_addons = (	'ipcomp_in'	=> 'ipcomp/___mode___/___dst_ip___-___src_ip___/use',
-			'ipcomp_out'	=> 'ipcomp/___mode___/___src_ip___-___dst_ip___/use'
+%spdadd_addons = (	'ipcomp_in'	=> '	ipcomp/___mode___/___dst_ip___-___src_ip___/use',
+			'ipcomp_out'	=> '	ipcomp/___mode___/___src_ip___-___dst_ip___/use',
+			'ah_in'		=> '	ah/transport//require',
+			'ah_out'	=> '	ah/transport//require'
 		);
 # allow the following icmp control traffic
 # - echo reply (0)
@@ -2263,7 +2269,8 @@ sub spd_fill_add ($) {
 
 	my $hndl = $connection_list{$connection};
 	$stuff = $spdadd{$$hndl{'spdadd_template'}};
-	
+
+	# We only do interesting things on %default templates	
 	if ($hndl->{'spdadd_template'} eq '%default') {
 		# Use transport template if needed
 		if ($hndl->{'mode'} eq 'transport'
@@ -2281,12 +2288,21 @@ sub spd_fill_add ($) {
 			}	
 		}
 				
+		#
+		# Do fill in AH header if asked for.
+		if ($hndl->{'encap'} eq 'esp' 
+			&& ($hndl->{'mode'} eq 'transport' 
+				&& $bool_val{"$hndl->{'auto_ah_on_esp'}"} != 0
+				|| $bool_val{"$hndl->{'always_ah_on_esp'}"} != 0)) {
+			$stuff =~ s/^(\s*spdadd.*out ipsec\s*\n.*);$/${1}\n${spdadd_addons{'ah_out'}};/mg;
+			$stuff =~ s/^(\s*spdadd.*in ipsec\s*\n.*);$/${1}\n${spdadd_addons{'ah_in'}};/mg;
+		}
 		#  
 		# Do fill in values for compression
 		if (defined $hndl->{'compression'} 
 			&& $bool_val{"$hndl->{'compression'}"} != 0) {
-			$stuff =~ s/^(\s*spdadd.*out ipsec\s*)$/${1}\n${spdadd_addons{'ipcomp_out'}}/m;
-			$stuff =~ s/^(\s*spdadd.*in ipsec\s*)$/${1}\n${spdadd_addons{'ipcomp_in'}}/m;
+			$stuff =~ s/^(\s*spdadd.*out ipsec\s*)$/${1}\n${spdadd_addons{'ipcomp_out'}}/mg;
+			$stuff =~ s/^(\s*spdadd.*in ipsec\s*)$/${1}\n${spdadd_addons{'ipcomp_in'}}/mg;
 		}
 	}	
 
