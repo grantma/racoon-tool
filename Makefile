@@ -25,7 +25,9 @@ install: dummy install-man
 	- mkdir -p $(SBINDIR)
 	- mkdir -p $(CONFDIR)
 	$(INSTALL) -m 755 racoon-tool.pl $(SBINDIR)/racoon-tool
-	$(INSTALL) -m 644 racoon-tool.conf $(CONFDIR)
+	@if [ ! -f $(CONFDIR)/racoon-tool.conf ]; then \
+		$(INSTALL) -m 644 -b racoon-tool.conf $(CONFDIR) ; \
+	fi
 
 uninstall:
 	- rm -f $(SBINDIR)/racoon-tool
