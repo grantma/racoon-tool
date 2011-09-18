@@ -102,6 +102,13 @@ if ($^O =~ /linux|gnukfreebsd/i) {
 } else {
 	prog_die("unsupported platform - '$^O'.");
 }
+
+# Some OS kernels need time for their SAD and SPD to settle.
+$quiesce = 0;
+if ($^O =~ /freebsd/i) {
+	$quiesce = 1;
+}
+
 $pager_cmd =  ( -x $less_cmd ? $less_cmd : $more_cmd );
 @pager_flags = ( -x $less_cmd ? ( '-MMXEi' ): ());
 # Handle BSD and SYSV ps...
@@ -154,7 +161,7 @@ my %connection_list = ( '%default' => {
 			'encryption_algorithm'	=> 'aes,3des',
 			'authentication_algorithm'	=> 'hmac_sha1,hmac_md5',
 			'id_type'		=> 'address',
-			'auto_ah_on_esp'	=> 'on',
+			'auto_ah_on_esp'	=> 'off',
 			'always_ah_on_esp'	=> 'off'
 			},
 			'%anonymous'		=> {
@@ -1195,6 +1202,7 @@ EOF
 	close SETKEY
 		or prog_die ("conn_down() - setkey connection deletion failed - exit code ". ($? >> 8) );
 
+	sleep($quiesce) if ($quiesce > 0);
 	# Deal with racoon
 	if ( ! $no_racoon ) {
 		racoon_configure();
@@ -1290,7 +1298,6 @@ sub parse_spd (\@\%) {
 
 	close (SETKEY)
 		or prog_die "parse_spd() - can't parse SPD - exit code " . ($? >> 8);
-
 	# match the SPD policies to configuration data.
 	match_spd_connection (@$spd_list, %$conn_spd_hash);
 
@@ -1381,10 +1388,10 @@ sub ipsec_load () {
 	print "done.\n";
 	prog_warn 'info', "configured racoon.";
 	return 1;
-	}
+}
 
-	# flush 
-	sub ipsec_flush () {
+# flush 
+sub ipsec_flush () {
 	print "Flushing SAD and SPD...\n";
 	# Flush the SAD
 	sad_flush ();
@@ -2358,6 +2365,7 @@ EOF
 		}
 		prog_die "loading SPD failed - exit code " . ($err >> 8);
 	}
+	sleep($quiesce) if ($quiesce > 0);
 	return 1;
 }
 
@@ -2372,6 +2380,7 @@ $spdinit
 EOF
 
 	close SETKEY or prog_die "initialising SPD failed - exit code " . ($? >> 8);
+	sleep($quiesce) if ($quiesce > 0);
 	return 1;
 }
 
@@ -2385,6 +2394,7 @@ $sadinit
 EOF
 
 	close SETKEY or prog_die "initialising SPD failed - exit code " . ($? >> 8);
+	sleep($quiesce) if ($quiesce > 0);
 	return 1;
 }
 
@@ -2428,6 +2438,7 @@ sub setkey_flush ($) {
 	close SETKEY;
 	prog_die ("flushing $table failed - exit code " . ($? >> 8)) 
 			if ( $? && ! $cleanret);
+	sleep($quiesce) if ($quiesce > 0);
 	return 0
 }
 
