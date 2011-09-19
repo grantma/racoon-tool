@@ -106,7 +106,7 @@ if ($^O =~ /linux|gnukfreebsd/i) {
 # Some OS kernels need time for their SAD and SPD to settle.
 $quiesce = 0;
 if ($^O =~ /freebsd/i) {
-	$quiesce = 1;
+	$quiesce = 1; # seconds
 }
 
 $pager_cmd =  ( -x $less_cmd ? $less_cmd : $more_cmd );
@@ -284,8 +284,8 @@ spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in ipsec
 EOF
 %spdadd_addons = (	'ipcomp_in'	=> '	ipcomp/___mode___/___dst_ip___-___src_ip___/use',
 			'ipcomp_out'	=> '	ipcomp/___mode___/___src_ip___-___dst_ip___/use',
-			'ah_in'		=> '	ah/transport//require',
-			'ah_out'	=> '	ah/transport//require'
+			'ah_in'		=> '	ah/transport/___dst_ip___-___src_ip___/___level___',
+			'ah_out'		=> '	ah/transport/___src_ip___-___dst_ip___/___level___'
 		);
 # allow the following icmp control traffic
 # - echo reply (0)
