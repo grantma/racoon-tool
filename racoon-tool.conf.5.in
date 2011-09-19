@@ -323,13 +323,13 @@ peer(172.30.1.1):
 
 .SH "FILES"
 .TP
-.I /etc/racoon/racoon-tool.conf
+.I @@CONFDIR@@/racoon-tool.conf
 (configuration header file)
 .TP
-.I /etc/raccon/racoon-tool.conf.d/*.conf
+.I @@CONFDIR@@/racoon-tool.conf.d/*.conf
 optional portions.  The file(s) that this man page describes.
 .TP
-.I /var/lib/racoon/racoon.conf
+.I @@VARCONFDIR@@/racoon.conf
 The generated racoon.conf.
 
 .SH "SEE ALSO"

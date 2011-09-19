@@ -57,11 +57,11 @@ Start
 .BR racoon (8), 
 loading any needed modules, configuring the SPD, and generating
 a configuration from
-.I /etc/racoon/racoon-tool.conf
+.I @@CONFDIR@@/racoon-tool.conf
 (head) and following up with
 .I*.conf
 files from
-.I /etc/racoon/racoon-tool.conf.d/.
+.I @@CONFDIR@@/racoon-tool.conf.d/.
 .TP
 .B stop
 Stop
@@ -70,9 +70,9 @@ unloading any crypto/IPSEC modules, flushing the SAD and SPD.
 .TP
 .B reload
 Regenerate configuration from
-.I /etc/racoon/racoon.conf,
+.I @@CONFDIR@@/racoon.conf,
 and
-.I /etc/racoon/racoon.conf.d/,
+.I @@CONFDIR@@/racoon.conf.d/,
 .I HUP
 .BR racoon (8)
 and reinitialise the SPD and SAD.
@@ -112,7 +112,7 @@ Reload the VPN connection(s).
 .TP
 .BR "vpnlist|vlist" " [connection-name|all]"
 List the known VPN connections in
-.I /etc/racoon/racoon-tool.conf, etc.
+.I @@CONFDIR@@/racoon-tool.conf, etc.
 Can be used by a script or administrator to see 
 if a VPN connection exists.
 .TP
@@ -132,13 +132,13 @@ Stop only the
 daemon.
 .SH "FILES"
 .TP
-.I /etc/racoon/racoon-tool.conf 
+.I @@CONFDIR@@/racoon-tool.conf 
 \- configuration file (head).
 .TP
-.I /etc/racoon/racoon-tool.conf.d
+.I @@CONFDIR@@/racoon-tool.conf.d
 \- configuration file segment directory read after the above.
 .TP
-.I /var/lib/racoon/racoon.conf 
+.I @@VARCONFDIR@@/racoon.conf 
 \- generated racoon.conf
 .SH "SEE ALSO"
 .BR racoon (8),
