@@ -22,8 +22,12 @@ endif
 SBINDIR=$(PREFIX)/sbin
 MANDIR=$(PREFIX)/man
 INSTALL=/usr/bin/install
+IPSEC_TOOLS_VERSION = 0.8.0
+IPSEC_TOOLS_DEBDIR = ../ipsec-tools-$(IPSEC_TOOLS_VERSION)/debian
 
 MANPAGES := racoon-tool.8 racoon-tool.conf.5
+
+all: manpages
 
 manpages: $(MANPAGES)
 
@@ -52,6 +56,12 @@ install: install-man
 	@if [ ! -f $(CONFDIR)/racoon-tool.conf ]; then \
 		$(INSTALL) -m 644 -b racoon-tool.conf $(DESTDIR)$(CONFDIR) ; \
 	fi
+
+install-debian: manpages
+	$(INSTALL) -m 644 racoon-tool.pl $(IPSEC_TOOLS_DEBDIR)
+	$(INSTALL) -m 644 racoon-tool.8 $(IPSEC_TOOLS_DEBDIR)
+	$(INSTALL) -m 644 racoon-tool.conf.5 $(IPSEC_TOOLS_DEBDIR)
+	$(INSTALL) -m 644 racoon-tool.conf $(IPSEC_TOOLS_DEBDIR)
 
 uninstall:
 	- rm -f $(SBINDIR)/racoon-tool
