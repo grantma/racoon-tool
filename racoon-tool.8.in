@@ -59,7 +59,7 @@ loading any needed modules, configuring the SPD, and generating
 a configuration from
 .I @@CONFDIR@@/racoon-tool.conf
 (head) and following up with
-.I*.conf
+.I *.conf
 files from
 .I @@CONFDIR@@/racoon-tool.conf.d/.
 .TP

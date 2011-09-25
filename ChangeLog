@@ -1,0 +1,168 @@
+commit fe08017e39ebaaa855441f015084b7b6eedd26d2
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 19 16:02:15 2011 +1200
+
+    Added .gitignore for *.swp and generated manpages.
+
+commit 8a195718e167f41adb4c8e9c33c6a5c17baa2212
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 19 14:34:49 2011 +1200
+
+    Generate manpages according to OS.
+    
+    Bit rough, based on uname -s, but that is what we do in racoon-tool script
+    anyhow.
+
+commit 1d694aaf0af3e5420558c36508b99ae3184c3c60
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 19 13:13:02 2011 +1200
+
+    Make AH transform congruent with ipcomp.
+    
+    Linux kernel removes transport mode connection info.  FreeBSD doesn't,
+    but things whould all still just work.
+
+commit 7679bae170acb70b484858fb9d61ba712eeb8d91
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 19 13:11:23 2011 +1200
+
+    Update manpages to level of current work.
+
+commit a4765d69e5b882c9fae9ecf9735ef17f24858a8c
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 19 10:07:42 2011 +1200
+
+    Fix problems on FreeBSD
+    
+    - Use sleep() to quiesce after setkey has executed to let SPD/SAD settle
+      as needed.
+    - Disable auto_ah_on_esp as FreeBSD can't handle multiple IPSEC
+      processing statements.  It is also nore reliable with ipcomp...
+
+commit 41ed9a1396b12f47a8fce3abdbe6b284f4d50170
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Fri Sep 16 16:12:38 2011 +1200
+
+    AH support for %default spdadd template.
+
+commit 07d35cba091690cc34cdd78fe0a5442872af0cbf
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Fri Sep 16 14:16:55 2011 +1200
+
+    Update Makefile so config file is not overwritten.
+
+commit a690d2f43bceb6574a7435aac813bbb825ceaac6
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Fri Sep 16 13:50:45 2011 +1200
+
+    Use -f /dev/stdin instead of -c for setkey.
+    
+    - Found that -c had stdout input echo on FreeBSD, and not on Linux.
+      changed to -f /dev/stdin to bypass this.  Also gives
+      better errors for spdadd.
+
+commit c44cd9beecacfaba5cf60523cd489075db732303
+Merge: 7517979 afbf854
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Thu Sep 15 14:35:25 2011 +1200
+
+    Merge branch 'master' of https://git.devel.net.nz/dms/racoon-tool
+
+commit afbf8547641b0531eba5c9acd74acba1bfe7ce36
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Thu Sep 15 14:33:34 2011 +1200
+
+    Really add Makefile!!
+
+commit 751797996a3710029bc8d17159c1e7fc4c06048f
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Thu Sep 15 14:20:10 2011 +1200
+
+    Create some needed documentation, man updates.
+    
+    - README and GPL-2 license files
+    - Update email addresses on man pages.
+
+commit 403a190f645cd353731d2c8b9e7ba2db8e6e6d7e
+Merge: 2cafffb 18b0fae
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Thu Sep 15 13:58:31 2011 +1200
+
+    Merge branch 'master' of https://git.devel.net.nz/dms/racoon-tool
+
+commit 18b0faecb93f8d628d676152b0dff538fa2683f6
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Thu Sep 15 13:55:25 2011 +1200
+
+    Initial Makefile for racoon-tool
+
+commit 2cafffbdcc112eb36dee7b462ac9433f3290d11a
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Thu Sep 15 13:19:03 2011 +1200
+
+    Initial multiplatform coding.
+
+commit 98b94dcb21d47341ccd15663817f94750f9a5168
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Wed Sep 14 15:06:31 2011 +1200
+
+    Final Linux only version.
+
+commit f1a779b1649b9776416abf3b461b8364388dc44f
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Wed Sep 14 14:10:13 2011 +1200
+
+    Transport mode working. First cut
+    
+    - Uses seperate templates for transport mode processing if an spd
+      template is not supplied.
+    - ICMP is transmitted unencrypted in default transport mode SPD on
+      any type connection protocol matches.
+
+commit 13700f8a8479d1288d08acda9a9a95469255e2e7
+Author: root <root@shalom-ext.internal.anathoth.net>
+Date:   Mon Sep 12 17:35:47 2011 +1200
+
+    Reading a configuration directory implemented.
+
+commit 723d789c49a6c77567badcb2a60f1677b7864c0f
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 12 13:58:36 2011 +1200
+
+    Update phase1 enc, dh_group, pfs_group, ph1 hash.
+    
+    Update list of possible values so that stronger modes are possible.
+
+commit e9fbc25ac4b100f731bcd97b31f9a980569d6d08
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 12 13:41:21 2011 +1200
+
+    Phase II auth and enc updates.
+
+commit 46a8db45cf2179ce695df2da79facf18f8d3ec8e
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Mon Sep 12 11:57:43 2011 +1200
+
+    Select good default minimum algorithms, enc types.
+    
+    - Phase 1 default of 3des/sha1
+    - Phase 2 default of hmac_sha1/hmac_md5, aes/3des
+    - add id_type parameter for sainfo generation
+
+commit 2cfb63884407e8b5d0e3b742b53436284174d759
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Fri Sep 9 16:42:04 2011 +1200
+
+    Script working, multiple connections, 1 Phase 2 SA
+
+commit 86132f217720265e097e32e25e7277236de7a745
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Fri Sep 9 14:08:49 2011 +1200
+
+    Fix indentation that had been undone...
+
+commit ef00fdb32d6d8a2cd93f1d8c0906623819afa0c0
+Author: Matthew Grant <matthewgrant5@gmail.com>
+Date:   Fri Sep 9 11:07:48 2011 +1200
+
+    Initial commit of racoon-tool source.
