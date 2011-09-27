@@ -46,7 +46,7 @@ sub conn_up_handle($);
 sub conn_menu($);
 sub racoon_write_config($$);
 sub racoon_configure(;$);
-sub peer_get_indexes (\%);
+sub prop_get_indexes (\%);
 sub conn_reload_handle($);
 sub check_if_running ();
 sub racoon_start();
@@ -122,7 +122,7 @@ $progname = basename($0, "");
 $racoon_kill_delay = 25; # seconds
 
 # global settings hash
-my $global_proplist = 'path_pre_shared_key|path_certificate|path_racoon_conf|racoon_command|racoon_pid_file|log|listen\[[0-9a-z]\]|complex_bundle';
+my $global_proplist = 'path_pre_shared_key|path_certificate|path_racoon_conf|racoon_command|racoon_pid_file|log|listen\[[0-9_a-z]+\]|complex_bundle';
 my %global = (
 		'path_pre_shared_key'	=> "$confdir/psk.txt",
 		'path_certificate'	=> "$confdir/certs",
@@ -132,7 +132,7 @@ my %global = (
 	);
 
 # Peer related stuff
-my $peer_proplist = 'exchange_mode|encryption_algorithm\[[0-9a-z]\]|hash_algorithm\[[0-9a-z]\]|dh_group\[[0-9a-z]\]|authentication_method\[[0-9a-z]\]|remote_template|lifetime|verify_identifier|verify_cert|passive|generate_policy|my_identifier|peers_identifier|certificate_type|peers_certfile|support_mip6|send_cr|send_cert|initial_contact|proposal_check|nat_traversal|nonce_size';
+my $peer_proplist = 'exchange_mode|encryption_algorithm\[[0-9_a-z]+\]|hash_algorithm\[[0-9_a-z]+\]|dh_group\[[0-9_a-z]+\]|authentication_method\[[0-9_a-z]+\]|remote_template|lifetime|verify_identifier|verify_cert|passive|generate_policy|my_identifier|peers_identifier|certificate_type|peers_certfile|support_mip6|send_cr|send_cert|initial_contact|proposal_check|nat_traversal|nonce_size';
 my %peer_list = (	'%default' => {
 			'exchange_mode'			=> 'main',
 			'encryption_algorithm[0]'	=> '3des',
@@ -153,7 +153,7 @@ my %connection_list = ( '%default' => {
 			'admin_status' 		=> 'disabled',
 			'upperspec' 		=> 'any',
 			'encap' 		=> 'esp',
-			'level' 		=> 'require',
+			'level' 		=> 'unique',
 			'spdadd_template' 	=> '%default',
 			'sadadd_template' 	=> '%default',
 			'sainfo_template' 	=> '%default',
@@ -293,7 +293,7 @@ EOF
 # - source quench (4)
 # - echo request (8)
 # - time exceeded (11)
-my $spdadd_transport_ip4_default = <<'EOF';
+my $spdadd_transport_ip4_header = << 'EOF';
 spdadd ___src_subnet___ ___dst_subnet___ icmp -P out priority 1 none;
 
 spdadd ___dst_subnet___ ___src_subnet___ icmp -P in priority 1 none;
@@ -302,14 +302,9 @@ spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out priority 1 none;
 
 spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in priority 1 none;
 
-spdadd ___src_range___ ___dst_range___ ___upperspec___ -P out ipsec
-	___encap___/___mode___/___src_ip___-___dst_ip___/___level___;
-
-spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in ipsec
-	___encap___/___mode___/___dst_ip___-___src_ip___/___level___;
-
 EOF
-my $spdadd_transport_ip6_default = <<'EOF';
+
+my $spdadd_transport_ip6_header = << 'EOF';
 spdadd ___src_subnet___ ___dst_subnet___ icmp6 -P out priority 1 none;
 
 spdadd ___dst_subnet___ ___src_subnet___ icmp6 -P in priority 1 none;
@@ -318,11 +313,16 @@ spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out priority 1 none;
 
 spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in priority 1 none;
 
-spdadd ___src_range___ ___dst_range___ ___upperspec___ -P out ipsec
-	___encap___/___mode___/___src_ip___-___dst_ip___/___level___;
+EOF
 
-spdadd ___dst_range___ ___src_range___ ___upperspec___ -P in ipsec
-	___encap___/___mode___/___dst_ip___-___src_ip___/___level___;
+my $spdadd_transport_ip4_default = "$spdadd_transport_ip4_header" . "$spdadd_default"; 
+
+my $spdadd_transport_ip6_default = "$spdadd_transport_ip6_header" . "$spdadd_default"; 
+
+my $spdadd_trailer = << 'EOF';
+spdadd ___src_subnet___ ___dst_subnet___ ___upperspec___ -P out priority -1 discard;
+
+spdadd ___dst_subnet___ ___src_subnet___ ___upperspec___ -P in priority -1 discard;
 
 EOF
 
@@ -757,7 +757,7 @@ sub racoon_fill_remote ($) {
 				$stuff =~ s/^(\s*remote.*{\s*)$/${1}\n\t${remote_addons{"$property"}}/m;
 			}
 		}
-		my @pindexes = peer_get_indexes ( %$hndl );
+		my @pindexes = prop_get_indexes ( %$hndl );
 		foreach my $ind ( @pindexes ) {
 			my $to_add = $remote_proposal;
 			$to_add =~ s/___(\S+)___/___$1\[$ind\]___/gm;
@@ -812,12 +812,12 @@ sub racoon_fill_init () {
 	my $stuff = $racoon_init;
 
 	foreach my $key ( keys %global ) {
-		$key =~ s/^(\S+)\[[0-9a-z]\]$/$1/i;
+		$key =~ s/^(\S+)\[[0-9_a-z]+\]$/$1/i;
 		if ( defined $init_addons{"$key"} ) {
 			$stuff =~ s/^(\s*path certificate.*)$/${1}\n${init_addons{"$key"}}/m;
 		}
 	}
-	my @indexes = peer_get_indexes ( %global );
+	my @indexes = prop_get_indexes ( %global );
 	foreach my $ind ( @indexes ) {
 		my $to_add = $init_addons{'isakmp'};
 		$to_add =~ s/___(\S+)___/___$1\[$ind\]___/gm;
@@ -2103,13 +2103,13 @@ sub conn_fillin_defaults () {
 	} 
 }
 
-sub peer_get_indexes (\%) {
+sub prop_get_indexes (\%) {
 	my $hndl = shift;
 	my %tmp;
 
 	my @keys = keys %$hndl;
-	@keys = grep /^.*\[[0-9]+\]$/, @keys;
-	map { s/^.*\[([0-9]+)\]$/$1/; } @keys;
+	@keys = grep /^.*\[[0-9_a-z]+\]$/, @keys;
+	map { s/^.*\[([0-9_a-z]+)\]$/$1/; } @keys;
 	$tmp{$_} = 1 foreach (@keys);
 	@keys = reverse (sort (keys (%tmp)));
 	
@@ -2134,7 +2134,7 @@ sub peer_fillin_defaults () {
 	foreach my $peer ( keys %peer_list ) {
 		my $phndl = $peer_list{$peer};
 		# Fill in all proposals...
-		my @pindexes = peer_get_indexes ( %$phndl );
+		my @pindexes = prop_get_indexes ( %$phndl );
 		foreach my $property ( grep { $_ = $1 if /^(.*)\[[0-9]+\]$/;  } keys %$dhndl ) {
 			foreach my $ind ( @pindexes ) {
 				next if $peer eq '%default' && $ind == 0;
