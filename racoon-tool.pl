@@ -1976,6 +1976,9 @@ sub check_property_syntax ($$$) {
 		return ip_check_syntax($value);
 	} elsif ( $ptype eq 'port' ) {
 		my $port;
+		if (  $port = getservbyname ($value, '' )) {
+			return 1;
+		}
 		if ($value =~ m/^\[?(any|[0-9]{1,5})\]?$/i ) {
 			$port = $1;
 		} else {
@@ -2104,6 +2107,20 @@ sub conn_check_required () {
 	}
 }
 
+# Translate /etc/services name to port
+sub getportnum($) {
+	my $port = shift;
+	my $value;
+
+	if ($port =~ m/^(any|\[any\])$/ ) {
+		return $port;
+	}
+	if ($value = getservbyname( $port, '')){
+		return $value;
+	}
+	return $port;
+}
+
 # Fill in default missing parameters
 sub conn_fillin_defaults () {
 	foreach my $connection ( keys %connection_list ) {
@@ -2146,19 +2163,19 @@ sub conn_fillin_defaults () {
 		# Work out IDs for use with racoon configuration
 		# Remove any port information as racoon sees it as duplicate sainfo...
 		my $local_id = $chndl->{'src_range'};
-		$local_id =~ m/^(\S+)(\[(any|[0-9]{1,5})\])$/;
+		$local_id =~ m/^(\S+)(\[(any|[0-9]{1,5}|[-0-9a-z]+)\])$/;
 		my $src_port = $2;
 		$local_id = $1;
 		$chndl->{'local_id'} = $local_id;
 		$chndl->{'src_subnet'} = $local_id;
-		$chndl->{'src_port'} = $src_port;
+		$chndl->{'src_port'} = getportnum($src_port);
 		my $remote_id = $chndl->{'dst_range'};
-		$remote_id =~ m/^(\S+)(\[(any|[0-9]{1,5})\])$/;
+		$remote_id =~ m/^(\S+)(\[(any|[0-9]{1,5}|[-0-9a-z]+)\])$/;
 		my $dst_port = $2;
 		$remote_id = $1;
 		$chndl->{'remote_id'} = $remote_id; 
 		$chndl->{'dst_subnet'} = $remote_id; 
-		$chndl->{'dst_port'} = $dst_port; 
+		$chndl->{'dst_port'} = getportnum($dst_port); 
 		
 		# Set the mode appropriately if not already set
 		if ( !defined $chndl->{'mode'} ) {
@@ -2185,8 +2202,9 @@ sub conn_fillin_defaults () {
 			foreach my $p ( 'src', 'dst' ) {
 				my $pname = "${p}_port" . "[${ind}]";
 				$chndl->{$pname} = '[any]' if ( ! defined $chndl->{$pname} );
+				$chndl->{$pname} = getportnum($chndl->{$pname});
 				$chndl->{$pname} =~ s/^(any|[0-9]{1,5})$/[${1}]/;
-				$chndl->{"${p}_range[${ind}]"} = $chndl->{"${p}_subnet"} . $chndl->{"${p}_port[${ind}]"}
+				$chndl->{"${p}_range[${ind}]"} = $chndl->{"${p}_subnet"} . $chndl->{"${p}_port[${ind}]"};
 			}
 			foreach my $p ( 'level', 'encap', 'policy' ) {
 				my $pname = "${p}" . "[${ind}]";
