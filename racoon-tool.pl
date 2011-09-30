@@ -317,9 +317,9 @@ spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out none;
 
 spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in none;
 
-spdadd ___src_subnet___ ___dst_subnet___ ___encap___ -P out none;
+spdadd ___src_subnet___ ___dst_subnet___ 50 -P out none;
 
-spdadd ___dst_subnet___ ___src_subnet___ ___encap___ -P in none;
+spdadd ___dst_subnet___ ___src_subnet___ 50 -P in none;
 
 EOF
 
@@ -332,9 +332,9 @@ spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out none;
 
 spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in none;
 
-spdadd ___src_subnet___ ___dst_subnet___ ___encap___ -P out none;
+spdadd ___src_subnet___ ___dst_subnet___ 50 -P out none;
 
-spdadd ___dst_subnet___ ___src_subnet___ ___encap___ -P in none;
+spdadd ___dst_subnet___ ___src_subnet___ 50 -P in none;
 
 EOF
 
