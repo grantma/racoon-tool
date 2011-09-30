@@ -309,16 +309,32 @@ EOF
 # - echo request (8)
 # - time exceeded (11)
 my $spdadd_ip4_header = << 'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ icmp -P out priority 1 none;
+spdadd ___src_subnet___ ___dst_subnet___ icmp -P out none;
 
-spdadd ___dst_subnet___ ___src_subnet___ icmp -P in priority 1 none;
+spdadd ___dst_subnet___ ___src_subnet___ icmp -P in none;
+
+spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out none;
+
+spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in none;
+
+spdadd ___src_subnet___ ___dst_subnet___ ___encap___ -P out none;
+
+spdadd ___dst_subnet___ ___src_subnet___ ___encap___ -P in none;
 
 EOF
 
 my $spdadd_ip6_header = << 'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ icmp6 -P out priority 1 none;
+spdadd ___src_subnet___ ___dst_subnet___ icmp6 -P out none;
 
-spdadd ___dst_subnet___ ___src_subnet___ icmp6 -P in priority 1 none;
+spdadd ___dst_subnet___ ___src_subnet___ icmp6 -P in none;
+
+spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out none;
+
+spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in none;
+
+spdadd ___src_subnet___ ___dst_subnet___ ___encap___ -P out none;
+
+spdadd ___dst_subnet___ ___src_subnet___ ___encap___ -P in none;
 
 EOF
 
@@ -327,9 +343,9 @@ my $spdadd_transport_ip4_default = "$spdadd_ip4_header" . "$spdadd_default";
 my $spdadd_transport_ip6_default = "$spdadd_ip6_header" . "$spdadd_default"; 
 
 my $spdadd_trailer = << 'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ ___upperspec___ -P out priority -1 ___guard_policy___;
+spdadd ___src_subnet___ ___dst_subnet___ ___upperspec___ -P out ___guard_policy___;
 
-spdadd ___dst_subnet___ ___src_subnet___ ___upperspec___ -P in priority -1 ___guard_policy___;
+spdadd ___dst_subnet___ ___src_subnet___ ___upperspec___ -P in ___guard_policy___;
 
 EOF
 
@@ -2442,12 +2458,6 @@ sub spd_fill_add ($) {
 		}
 
 		#
-		# spd priority only supported on Linux kernels
-		if ($^O !~ /linux/i) {
-			$stuff =~ s/^(\s*spdadd.*(in|out))\s+prio.*(ipsec|discard;|none;)$/${1} ${3}/mg;
-		}	
-				
-		#
 		# Do fill in AH header if asked for.
 		if ($hndl->{'encap'} eq 'esp' 
 			&& ($hndl->{'mode'} eq 'transport' 
@@ -2473,6 +2483,12 @@ sub spd_fill_add ($) {
 		$stuff =~ s/___${key_reg}___/$$hndl{"$key"}/img;
 	}
 
+	#
+	# spd priority only supported on Linux kernels
+	if (($^O !~ /linux/i) && ($hndl->{'spdadd_template'} eq '%default') ) {
+		$stuff =~ s/^(\s*spdadd.*(in|out))\s+prio.*(ipsec|discard;|none;)$/${1} ${3}/mg;
+	}	
+			
 
 	return $stuff;
 }
