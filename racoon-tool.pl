@@ -47,6 +47,7 @@ sub conn_menu($);
 sub racoon_write_config($$);
 sub racoon_configure(;$);
 sub prop_get_indexes (\%);
+sub prop_store_index (\%$);
 sub conn_reload_handle($);
 sub check_if_running ();
 sub racoon_start();
@@ -755,8 +756,8 @@ sub racoon_fill_remote ($) {
 				$stuff =~ s/^(\s*remote.*{\s*)$/${1}\n\t${remote_addons{"$property"}}/m;
 			}
 		}
-		my @pindexes = prop_get_indexes ( %$hndl );
-		foreach my $ind ( @pindexes ) {
+		my $pindexes = $hndl->{'pindexes'};
+		foreach my $ind ( @$pindexes ) {
 			my $to_add = $remote_proposal;
 			$to_add =~ s/___(\S+)___/___$1\[$ind\]___/gm;
 			$stuff =~ s/^(\s*remote.*{\s*)$/${1}\n${to_add}/m
@@ -1333,8 +1334,8 @@ sub match_spd_connection (\@\%) {
 			# Quick handle - read only
 			my $chndl = $connection_list{$connection};
 			# Below covers ipsec and none
-			my @pindexes = prop_get_indexes (%$chndl);
-			foreach my $ind (@pindexes) {
+			my $pindexes = $chndl->{'pindexes'};
+			foreach my $ind (@$pindexes) {
 				if ($spd->{'upperspec'} eq $chndl->{'upperspec'}
 					  && $spd->{'src_range' } eq $chndl->{"src_range[${ind}]"}
 					  && $spd->{'dst_range'} eq $chndl->{"dst_range[${ind}]"}
@@ -1604,6 +1605,8 @@ sub parse_config () {
 					next LINE;
 				}
 				$value = value_lc($section, $property, $value);
+				# Keep list of spd indexes for ordering
+				prop_store_index(%{ $connection_list{$connection} }, $property);
 				$connection_list{$connection}{$property} = $value; 
 			} elsif ( $section eq 'connection' ) {
 				prog_warn 0, "$connection - unrecognised tag in $cf, line $line:";
@@ -1626,6 +1629,8 @@ sub parse_config () {
 					$peer_list{$peer}{'syntax_error'} = 1;
 					next LINE;
 				}
+				# Keep list of proposal indexes for ordering
+				prop_store_index(%{ $peer_list{$peer} }, $property);
 				# $value = value_lc($section, $property, $value);
 				$peer_list{$peer}{$property} = $value; 
 			} elsif ( $section eq 'peer' ) {
@@ -2170,14 +2175,14 @@ sub conn_fillin_defaults () {
 		}
 
 		# Deal with SPD port rules
-		my @pindexes = prop_get_indexes ( %$chndl );
+		my $pindexes = $chndl->{'pindexes'} ;
 		# Work out if this is a multi SPD connection
-		if ( ! scalar(@pindexes)) {
+		if ( ! scalar(@$pindexes)) {
 			$chndl->{'multi_spd'} = 0;
 			next;
 		}
 		$chndl->{'multi_spd'} = 1;
-		foreach my $ind ( @pindexes ) {
+		foreach my $ind ( @$pindexes ) {
 			# fill in missing ports, and add missing '[]'s
 			foreach my $p ( 'src', 'dst' ) {
 				my $pname = "${p}_port" . "[${ind}]";
@@ -2207,6 +2212,20 @@ sub prop_get_indexes (\%) {
 	return @keys;
 }
 
+sub prop_store_index (\%$) {
+	my $hndl = shift;
+	my $property = shift;
+	
+	if ( ! defined $hndl->{'pindexes'} ) {
+		$hndl->{'pindexes'} = [];
+	}
+	if ($property =~ m/^\S+\[([_0-9a-z]+)\]$/) {
+		$pindex = $1;
+		return if ( grep { $_ eq $pindex} @{ $hndl->{'pindexes'}});  
+		push @{ $hndl->{'pindexes'} }, $pindex;
+	}
+}
+
 sub peer_fillin_defaults () {
 
 	# Copy default to defined peers
@@ -2225,9 +2244,9 @@ sub peer_fillin_defaults () {
 	foreach my $peer ( keys %peer_list ) {
 		my $phndl = $peer_list{$peer};
 		# Fill in all proposals...
-		my @pindexes = prop_get_indexes ( %$phndl );
+		my $pindexes = $phndl->{'pindexes'};
 		foreach my $property ( grep { $_ = $1 if /^(.*)\[[0-9_a-z]+\]$/;  } keys %$dhndl ) {
-			foreach my $ind ( @pindexes ) {
+			foreach my $ind ( @$pindexes ) {
 				next if $peer eq '%default' && $ind == 0;
 				my $name =  "$property" . '[' . "$ind" . "]";
 				my $dname = "$property" . '[0]';
@@ -2384,8 +2403,8 @@ sub spd_fill_add ($) {
 
 	# We only do interesting things on %default templates	
 	if ($hndl->{'spdadd_template'} eq '%default') {
-		my @pindexes = prop_get_indexes ( %$hndl );
-		my $multi_spd = scalar( @pindexes );
+		my $pindexes = $hndl->{'pindexes'};
+		my $multi_spd = scalar( @$pindexes );
 		if ($multi_spd > 0) {
 			if ($hndl->{'src_range_iptype'} eq 'ip4') {
 				$stuff = $spdadd_ip4_header;
@@ -2393,7 +2412,7 @@ sub spd_fill_add ($) {
 				$stuff = $spdadd_ip6_header;
 			}
 			# Build multi SPD template
-			foreach my $ind ( @pindexes ) {
+			foreach my $ind ( @$pindexes ) {
 				my $to_add;
 				my $pname = "policy[${ind}]";
 				if ($hndl->{$pname} eq 'ipsec') {
