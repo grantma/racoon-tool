@@ -147,7 +147,7 @@ my %peer_list = (	'%default' => {
 			} );
 
 # Connection related stuff
-my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|src_port\[[_0-9a-z]+\]|dst_port\[[_0-9a-z]+\]|upperspec|encap|encap\[[_0-9a-z]+\]|mode|level|level\[[_0-9a-z]+\]|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression|id_type|auto_ah_on_esp|always_ah_on_esp|guard_policy|policy|policy\[[_0-9a-z]+\]';
+my $conn_proplist = 'src_range|dst_range|src_ip|dst_ip|src_port\[[_0-9a-z]+\]|dst_port\[[_0-9a-z]+\]|upperspec|encap|encap\[[_0-9a-z]+\]|mode|level|level\[[_0-9a-z]+\]|admin_status|spdadd_template|sadadd_template|sainfo_template|pfs_group|lifetime|encryption_algorithm|authentication_algorithm|compression|id_type|auto_ah_on_esp|always_ah_on_esp|policy|policy\[[_0-9a-z]+\]';
 my @conn_required_props = ( 'src_ip', 'dst_ip');
 my %connection_list = ( '%default' => {
 			'admin_status' 		=> 'disabled',
@@ -164,7 +164,6 @@ my %connection_list = ( '%default' => {
 			'id_type'		=> 'address',
 			'auto_ah_on_esp'	=> 'off',
 			'always_ah_on_esp'	=> 'off',
-			'guard_policy'		=> 'discard',
 			'policy'		=> 'ipsec'
 			},
 			'%anonymous'		=> {
@@ -195,7 +194,6 @@ my %prop_typehash = ( 	'connection'	=> {
 			'auto_ah_on_esp'	=> 'boolean',
 			'always_ah_on_esp'	=> 'boolean',
 			'policy'		=> 'policy',
-			'guard_policy'		=> 'policy'
 			},
 			'peer'		=> {
 			'exchange_mode' 	=> 'phase1_exchange_mode',
@@ -309,45 +307,22 @@ EOF
 # - echo request (8)
 # - time exceeded (11)
 my $spdadd_ip4_header = << 'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ icmp -P out none;
+spdadd ___src_subnet___ ___dst_subnet___ icmp -P out priority 1 none;
 
-spdadd ___dst_subnet___ ___src_subnet___ icmp -P in none;
-
-spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out none;
-
-spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in none;
-
-spdadd ___src_subnet___ ___dst_subnet___ 50 -P out none;
-
-spdadd ___dst_subnet___ ___src_subnet___ 50 -P in none;
+spdadd ___dst_subnet___ ___src_subnet___ icmp -P in priority 1 none;
 
 EOF
 
 my $spdadd_ip6_header = << 'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ icmp6 -P out none;
+spdadd ___src_subnet___ ___dst_subnet___ icmp6 -P out priority 1 none;
 
-spdadd ___dst_subnet___ ___src_subnet___ icmp6 -P in none;
-
-spdadd ___src_subnet___[500] ___dst_subnet___[500] udp -P out none;
-
-spdadd ___dst_subnet___[500] ___src_subnet___[500] udp -P in none;
-
-spdadd ___src_subnet___ ___dst_subnet___ 50 -P out none;
-
-spdadd ___dst_subnet___ ___src_subnet___ 50 -P in none;
+spdadd ___dst_subnet___ ___src_subnet___ icmp6 -P in priority 1 none;
 
 EOF
 
 my $spdadd_transport_ip4_default = "$spdadd_ip4_header" . "$spdadd_default"; 
 
 my $spdadd_transport_ip6_default = "$spdadd_ip6_header" . "$spdadd_default"; 
-
-my $spdadd_trailer = << 'EOF';
-spdadd ___src_subnet___ ___dst_subnet___ ___upperspec___ -P out ___guard_policy___;
-
-spdadd ___dst_subnet___ ___src_subnet___ ___upperspec___ -P in ___guard_policy___;
-
-EOF
 
 my $racoon_init_default = <<"EOF";
 path pre_shared_key ___path_pre_shared_key___;
@@ -2100,18 +2075,7 @@ sub conn_check_required () {
 				$makelive = 0;
 			}
 		}
-		# Check that dst_port and src_port are valid if multi SPD
-		if ( $chndl->{'multi_spd'} ) {
-			my @pindexes = prop_get_indexes ( %$chndl );
-			foreach my $ind ( @pindexes ) {
-				my $src_port_name = "src_port" . "[${ind}]";
-				my $dst_port_name = "dst_port" . "[${ind}]";
-				if ($chndl->{$src_port_name} eq '[any]' && $chndl->{$dst_port_name} eq '[any]') {
-					prog_warn 0, "$connection - $src_port_name or $dst_port_name missing.";
-					$makelive = 0;
-				}
-			}
-		}
+		
 		$makelive = 0 if ( $chndl->{'syntax_error'} );
 		if (! $makelive) {
 			prog_warn 0, "$connection - required parameters missing, peer missing or syntax error.";
@@ -2440,7 +2404,6 @@ sub spd_fill_add ($) {
 				$to_add =~ s/___(encap|level|policy|src_range|dst_range)___/___$1\[$ind\]___/gm;
 				$stuff .= $to_add;
 			}
-			$stuff .= $spdadd_trailer;
 
 		} else {
 			# Original non-multi SPD template action
