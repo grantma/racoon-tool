@@ -140,7 +140,9 @@ my %peer_list = (	'%default' => {
 			'hash_algorithm[0]'		=> 'sha1',
 			'dh_group[0]'			=> 'modp1024',
 			'authentication_method[0]'	=> 'pre_shared_key',
-			'remote_template'		=> '%default'
+			'remote_template'		=> '%default',
+			# Initialised because proposal 0 is present
+			'pindexes'			=> [0]
 			},
 			'%anonymous' 		=> {
 			'passive'		=> 'on',
