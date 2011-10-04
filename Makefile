@@ -22,8 +22,9 @@ endif
 SBINDIR=$(PREFIX)/sbin
 MANDIR=$(PREFIX)/man
 INSTALL=/usr/bin/install
-IPSEC_TOOLS_VERSION = 0.8.0
-IPSEC_TOOLS_DEBDIR = ../ipsec-tools-$(IPSEC_TOOLS_VERSION)/debian
+#IPSEC_TOOLS_VERSION = 0.8.0
+#IPSEC_TOOLS_DEBDIR = ../ipsec-tools-$(IPSEC_TOOLS_VERSION)/debian
+IPSEC_TOOLS_DEBDIR = ../ipsec-tools/debian
 
 MANPAGES := racoon-tool.8 racoon-tool.conf.5
 
