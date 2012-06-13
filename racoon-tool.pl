@@ -131,9 +131,9 @@ my %global = (
 		'path_script'		=> "$confdir/scripts",
 		'path_racoon_conf'	=> "${vardir}/racoon.conf",
 		'privsep'		=> "off",
-		'privsep_chroot'	=> "\"/\"",
-		'privsep_user'		=> "\"racoon\"",
-		'privsep_group'		=> "\"racoon\"",
+		'privsep_chroot'	=> "/",
+		'privsep_user'		=> "racoon",
+		'privsep_group'		=> "racoon",
 		'racoon_command'	=> "${racoon_cmd} -f ___path_racoon_conf___",
 		'racoon_pid_file'	=> "/var/run/racoon.pid",
 	);
