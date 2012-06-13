@@ -55,6 +55,10 @@ Available settings are:
 .I path_pre_shared_key,
 .I path_certificate,
 .I path_racoon_conf,
+.I privsep,
+.I privsep_chroot,
+.I privsep_user,
+.I privsep_group,
 .I racoon_command,
 .I racoon_pid_file,
 .I log,
@@ -63,11 +67,25 @@ and
 .I complex_bundle.
 
 Apart from
-.I racoon-command
+.I racoon_command,
 and
 .I racoon_pid_file,
 the setting map across to the similar names in
 .BR racoon.conf (5).
+
+These items
+.I privsep,
+.I privsep_chroot,
+.I privsep_user,
+.I privsep_group,
+are related to the 
+.I privsep
+section in
+.BR racoon.conf(5)
+.I Privsep 
+is a boolean option to turn on privilege separation. The default
+is to chroot to '/', as quite a bit of setup is required in the 
+chroot directory.
 
 The
 .I listen
